@@ -44,7 +44,7 @@ https://github.com/spiffe/spire/blob/master/conf/agent/agent.conf
 
 The agent plugin configuration template is as below:
 
-```
+```hcl
 plugins {
     NodeAttestor "openstack_iid" {
         plugin_cmd = "/path/to/plugin_cmd"
