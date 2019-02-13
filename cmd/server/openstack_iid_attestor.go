@@ -22,6 +22,8 @@ type IIDAttestorPlugin struct {
 	period   time.Duration
 
 	mtx *sync.RWMutex
+
+	getInstanceHandler func(string) (openstack.InstanceClient, error)
 }
 
 type IIDAttestorPluginConfig struct {
@@ -33,7 +35,8 @@ type IIDAttestorPluginConfig struct {
 
 func New() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
-		mtx: &sync.RWMutex{},
+		mtx:                &sync.RWMutex{},
+		getInstanceHandler: getOpenStackInstance,
 	}
 }
 
@@ -98,13 +101,9 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
-	provider, err := openstack.NewProvider(config.CloudName)
+	instance, err := p.getInstanceHandler(config.CloudName)
 	if err != nil {
-		return nil, err
-	}
-	instance, err := openstack.NewInstance(provider)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to prepare OpenStack Client: %v", err)
 	}
 
 	if config.AttestationPeriod != "" {
@@ -124,6 +123,15 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 
 func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoRequest) (*spi.GetPluginInfoResponse, error) {
 	return &spi.GetPluginInfoResponse{}, nil
+}
+
+// getOpenStackInstance returns authenticated openstack compute client.
+func getOpenStackInstance(cloud string) (openstack.InstanceClient, error) {
+	provider, err := openstack.NewProvider(cloud)
+	if err != nil {
+		return nil, err
+	}
+	return openstack.NewInstance(provider)
 }
 
 func main() {

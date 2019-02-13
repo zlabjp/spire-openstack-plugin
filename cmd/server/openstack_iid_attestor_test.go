@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/spiffe/spire/proto/common/plugin"
+
+	"github.com/zlabjp/openstack-iid-attestor/pkg/openstack"
 	"github.com/zlabjp/openstack-iid-attestor/pkg/util/fake"
 )
 
@@ -13,6 +18,17 @@ const (
 	testUUID      = "123"
 	testProjectID = "abc"
 	testPeriod    = "1h"
+
+	pluginConfig = `
+	cloud_name = "test"
+	projectid_whitelist = ["alpha", "bravo"]
+	`
+)
+
+var (
+	globalConfig = &plugin.ConfigureRequest_GlobalConfig{
+		TrustDomain: "example.com",
+	}
 )
 
 func newTestPlugin() *IIDAttestorPlugin {
@@ -21,6 +37,82 @@ func newTestPlugin() *IIDAttestorPlugin {
 			trustDomain: "example.com",
 		},
 		mtx: &sync.RWMutex{},
+	}
+}
+
+func TestConfigure(t *testing.T) {
+	p := newTestPlugin()
+	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
+		return fake.NewInstance(testProjectID), nil
+	}
+
+	ctx := context.Background()
+	req := fake.NewFakeConfigureRequest(globalConfig, pluginConfig)
+
+	_, err := p.Configure(ctx, req)
+	if err != nil {
+		t.Errorf("error from Configure(): %v", err)
+	}
+}
+
+func TestConfigureError(t *testing.T) {
+	p := newTestPlugin()
+	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
+		return fake.NewInstance(testProjectID), nil
+	}
+
+	ctx := context.Background()
+	req := fake.NewFakeConfigureRequest(globalConfig, "invalid config")
+
+	_, err := p.Configure(ctx, req)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+}
+
+func TestConfigureEmptyProjectID(t *testing.T) {
+	p := newTestPlugin()
+	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
+		return fake.NewInstance(testProjectID), nil
+	}
+
+	conf := `
+	cloud_name = "test"
+	`
+
+	ctx := context.Background()
+	req := fake.NewFakeConfigureRequest(globalConfig, conf)
+
+	wantError := "projectid_whitelist is required"
+	_, err := p.Configure(ctx, req)
+	if err == nil {
+		t.Error("expected error, got nil")
+	} else if err.Error() != wantError {
+		t.Errorf("got %v, wantPrefix %v", err, wantError)
+	}
+}
+
+func TestConfigureInvalidPeriodValue(t *testing.T) {
+	p := newTestPlugin()
+	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
+		return fake.NewInstance(testProjectID), nil
+	}
+
+	conf := `
+	cloud_name = "test"
+	projectid_whitelist = ["alpha", "bravo"]
+	attestation_period = "invalid"
+	`
+
+	ctx := context.Background()
+	req := fake.NewFakeConfigureRequest(globalConfig, conf)
+
+	wantErrorPrefix := "invalid value for attestation_period"
+	_, err := p.Configure(ctx, req)
+	if err == nil {
+		t.Error("expected error, got nil")
+	} else if !strings.HasPrefix(err.Error(), wantErrorPrefix) {
+		t.Errorf("got %v, wantPrefix %v", err, wantErrorPrefix)
 	}
 }
 
