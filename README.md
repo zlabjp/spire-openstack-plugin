@@ -28,6 +28,7 @@ The server plugin configuration template is as below:
 plugins {
     NodeAttestor "openstack_iid" {
         plugin_cmd = "/path/to/plugin_cmd"
+        plugin_checksum = "(SHOULD) sha256 of the plugin binary"
         plugin_data {
             cloud_name = "test"
             projectid_whitelist = ["123", "abc"]
@@ -59,6 +60,7 @@ The agent plugin configuration template is as below:
 plugins {
     NodeAttestor "openstack_iid" {
         plugin_cmd = "/path/to/plugin_cmd"
+        plugin_checksum = "(SHOULD) sha256 of the plugin binary"
         plugin_data {
         }
     }
@@ -69,6 +71,14 @@ The plugin_name should be "openstack_iid" and matches the name used in plugin co
 
 ## Security Consideration
 
-At this time OpenStack doesn't have signature for Identity information like AWS Instance Identity Documents or GCP's GCP Instance Identity Token. Therefore, Server can't prevent spoofing by a malicious Agent.
+At this time OpenStack doesn't have signature for Identity information like AWS Instance Identity Documents or GCP Instance Identity Token. Therefore, Server can't prevent spoofing by a malicious Agent.
 As a mitigation measure, re-attestation of the same instance is prohibited, and we can set the period from instance startup to attestation request.
-In the future, if it is possible to acquire Agent address information in the Server Plugin, it is possible to identify more strictly by comparing the IP address of the request source and the IP address associated with the instance obtainable from the metadata of the instance.
+In the future, if it is possible to acquire more information that can attest the agent from OpenStack or Plugin feature, it is possible to more strictly identify the agent.
+For instance, in the Server Plugin, it is conceivable to compare the IP address of the request source with the IP address associated with the instance obtainable from the instance metadata.
+
+## Re-Attestation the instance
+If you need to re-attestation the instance which is attested before, you need to evict the entry.
+
+```
+$ spire-server agent evict -spiffeID ${Agent's SPIFFE ID}
+```
