@@ -25,3 +25,7 @@ The `openstack_iid` resolver plugin resolves OpenStack IID-based SPIFFE ID into 
 ### Diagram
 
 ![openstack-iid-resolver-flow](images/openstack-iid-resolver-flow.png)
+
+## LICENSE
+
+This software is released under the MIT License.
