@@ -18,11 +18,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1ef6e0e2d7c470c6f3a3c88dc90d9923a16815c01688275287416a81c834b9f7"
+  digest = "1:f3904526a0cde5fe2e8ab4c3b0c4dbed6445308a461bf744c06a561ce117c1e8"
   name = "github.com/gophercloud/gophercloud"
   packages = [
     ".",
     "openstack",
+    "openstack/compute/v2/extensions/secgroups",
     "openstack/compute/v2/flavors",
     "openstack/compute/v2/images",
     "openstack/compute/v2/servers",
@@ -55,10 +56,7 @@
   branch = "master"
   digest = "1:58344c36890670070d279ee43e35babbb8d55f1dc4689900ff4d50c6f706b90a"
   name = "github.com/hashicorp/go-plugin"
-  packages = [
-    ".",
-    "internal/proto",
-  ]
+  packages = ["."]
   pruneopts = "UT"
   revision = "e37881a3f1a07fce82b3d99ce0342a72e53386bc"
 
@@ -97,26 +95,37 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:9ec6cf1df5ad1d55cf41a43b6b1e7e118a91bade4f68ff4303379343e40c0e25"
-  name = "github.com/oklog/run"
+  digest = "1:53bc4cd4914cd7cd52139990d5170d6dc99067ae31c56530621b18b35fc30318"
+  name = "github.com/mitchellh/mapstructure"
   packages = ["."]
   pruneopts = "UT"
-  revision = "4dadeb3030eda0273a12382bb2348ffc7c9d1a39"
-  version = "v1.0.0"
+  revision = "3536a929edddb9a5b34bd6861dc4a9647cb459fe"
+  version = "v1.1.2"
 
 [[projects]]
-  digest = "1:5cae95777479c61ae854b54e11bdc821ee7c30c9335035631bf03bf58cb4aa12"
+  branch = "master"
+  digest = "1:0725f1db4a879ba131d596d0185e3f7aa38813ca3e031c5faba66ec38be8aecb"
+  name = "github.com/spiffe/go-spiffe"
+  packages = ["uri"]
+  pruneopts = "UT"
+  revision = "b261e4202fec3209247fcf759c03bccde6ba6c91"
+
+[[projects]]
+  digest = "1:95cbede4923a99d2802963ec27ef6cddf2e5299e356570e35d507ecee0a83318"
   name = "github.com/spiffe/spire"
   packages = [
+    "pkg/common/idutil",
+    "pkg/common/util",
     "proto/agent/nodeattestor",
     "proto/builtin",
     "proto/common",
     "proto/common/plugin",
     "proto/server/nodeattestor",
+    "proto/server/noderesolver",
   ]
   pruneopts = "UT"
-  revision = "4a63ceb8e45182663de0a1ee7668a65a099bd28c"
-  version = "0.7.2"
+  revision = "81bbb8e55b7db398095df029eb27cff3c241cac8"
+  version = "0.7.3"
 
 [[projects]]
   branch = "master"
@@ -229,14 +238,19 @@
   input-imports = [
     "github.com/gophercloud/gophercloud",
     "github.com/gophercloud/gophercloud/openstack",
+    "github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/secgroups",
     "github.com/gophercloud/gophercloud/openstack/compute/v2/servers",
     "github.com/gophercloud/utils/openstack/clientconfig",
     "github.com/hashicorp/go-plugin",
     "github.com/hashicorp/hcl",
+    "github.com/mitchellh/mapstructure",
+    "github.com/spiffe/spire/pkg/common/idutil",
+    "github.com/spiffe/spire/pkg/common/util",
     "github.com/spiffe/spire/proto/agent/nodeattestor",
     "github.com/spiffe/spire/proto/common",
     "github.com/spiffe/spire/proto/common/plugin",
     "github.com/spiffe/spire/proto/server/nodeattestor",
+    "github.com/spiffe/spire/proto/server/noderesolver",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

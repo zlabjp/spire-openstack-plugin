@@ -43,7 +43,7 @@ func newTestPlugin() *IIDAttestorPlugin {
 func TestConfigure(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
-		return fake.NewInstance(testProjectID), nil
+		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
 
 	ctx := context.Background()
@@ -58,7 +58,7 @@ func TestConfigure(t *testing.T) {
 func TestConfigureError(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
-		return fake.NewInstance(testProjectID), nil
+		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
 
 	ctx := context.Background()
@@ -73,7 +73,7 @@ func TestConfigureError(t *testing.T) {
 func TestConfigureEmptyProjectID(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
-		return fake.NewInstance(testProjectID), nil
+		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
 
 	conf := `
@@ -95,7 +95,7 @@ func TestConfigureEmptyProjectID(t *testing.T) {
 func TestConfigureInvalidPeriodValue(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
-		return fake.NewInstance(testProjectID), nil
+		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
 
 	conf := `
@@ -117,7 +117,7 @@ func TestConfigureInvalidPeriodValue(t *testing.T) {
 }
 
 func TestAttest(t *testing.T) {
-	fi := fake.NewInstance(testProjectID)
+	fi := fake.NewInstance(testProjectID, nil, nil)
 
 	p := newTestPlugin()
 	p.instance = fi
@@ -147,7 +147,7 @@ func TestAttestInvalidUUID(t *testing.T) {
 }
 
 func TestAttestInvalidProjectID(t *testing.T) {
-	fi := fake.NewInstance("invalid-project-id")
+	fi := fake.NewInstance("invalid-project-id", nil, nil)
 
 	p := newTestPlugin()
 	p.instance = fi
@@ -163,7 +163,7 @@ func TestAttestInvalidProjectID(t *testing.T) {
 }
 
 func TestAttestBefore(t *testing.T) {
-	fi := fake.NewInstance(testProjectID)
+	fi := fake.NewInstance(testProjectID, nil, nil)
 
 	p := newTestPlugin()
 	p.instance = fi

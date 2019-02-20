@@ -1,15 +1,13 @@
-attestor_dirs := agent server
+binary_dirs := $(shell cd cmd && find */* -maxdepth 0 -type d)
 out_dir := out/bin
 
 utils = github.com/goreleaser/goreleaser \
 		github.com/golang/dep/cmd/dep
 
-build: build_attestor
+build: $(binary_dirs)
 
-build_attestor: $(attestor_dirs)
-
-$(attestor_dirs): noop
-	cd cmd/$@/openstack_iid_attestor && go build -o ../../../$(out_dir)/$@/openstack_iid_attestor  -i
+$(binary_dirs): noop
+	cd cmd/$@ && go build -o ../../../$(out_dir)/$@  -i
 
 utils: $(utils)
 
