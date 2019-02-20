@@ -39,12 +39,8 @@ func New() *IIDAttestorPlugin {
 
 func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
 	config := &IIDAttestorPluginConfig{}
-	hclTree, err := hcl.Parse(req.Configuration)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse configuration file: %s", err)
-	}
-	if err = hcl.DecodeObject(&config, hclTree); err != nil {
-		return nil, fmt.Errorf("failed to decoding configuration file: %v", err)
+	if err := hcl.Decode(config, req.Configuration); err != nil {
+		return nil, fmt.Errorf("failed to decode configuration file: %v", err)
 	}
 
 	if req.GlobalConfig == nil {

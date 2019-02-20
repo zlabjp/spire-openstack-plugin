@@ -65,7 +65,7 @@ func TestConfigureInvalidConfig(t *testing.T) {
 	cReq.Configuration = "invalid string"
 
 	_, err := p.Configure(ctx, cReq)
-	if !strings.HasPrefix(err.Error(), "failed to parse configuration file") {
+	if !strings.HasPrefix(err.Error(), "failed to decode configuration file") {
 		t.Errorf("unexpected error from Configure(): %v", err)
 	}
 }

@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/spiffe/spire/pkg/common/util"
-	"github.com/spiffe/spire/proto/common"
+	spc "github.com/spiffe/spire/proto/common"
 	"github.com/spiffe/spire/proto/common/plugin"
 	"github.com/spiffe/spire/proto/server/noderesolver"
 
+	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
 )
@@ -97,7 +98,7 @@ func TestResolve(t *testing.T) {
 	tCase := []struct {
 		meta map[string]string
 		sec  []map[string]interface{}
-		want []*common.Selector
+		want []*spc.Selector
 	}{
 		// 0: normal case
 		{
@@ -111,21 +112,21 @@ func TestResolve(t *testing.T) {
 					"name": "my-sg",
 				},
 			},
-			want: []*common.Selector{
+			want: []*spc.Selector{
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "meta:env:test",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "meta:role:my-role",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "sg:id:123",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "sg:name:my-sg",
 				},
 			},
@@ -144,21 +145,21 @@ func TestResolve(t *testing.T) {
 					"name": "my-sg",
 				},
 			},
-			want: []*common.Selector{
+			want: []*spc.Selector{
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "meta:env:test",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "meta:role:my-role",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "sg:id:123",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "sg:name:my-sg",
 				},
 			},
@@ -171,13 +172,13 @@ func TestResolve(t *testing.T) {
 					"name": "my-sg",
 				},
 			},
-			want: []*common.Selector{
+			want: []*spc.Selector{
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "sg:id:123",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "sg:name:my-sg",
 				},
 			},
@@ -188,13 +189,13 @@ func TestResolve(t *testing.T) {
 				"env":  "test",
 				"role": "my-role",
 			},
-			want: []*common.Selector{
+			want: []*spc.Selector{
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "meta:env:test",
 				},
 				{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: "meta:role:my-role",
 				},
 			},
@@ -224,7 +225,7 @@ func TestResolve(t *testing.T) {
 		req := getFakeResolveRequest([]string{testSpiffeID})
 
 		util.SortSelectors(tc.want)
-		wantSelector := &common.Selectors{
+		wantSelector := &spc.Selectors{
 			Entries: tc.want,
 		}
 
