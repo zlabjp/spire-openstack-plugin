@@ -16,11 +16,8 @@ import (
 	spi "github.com/spiffe/spire/proto/common/plugin"
 	"github.com/spiffe/spire/proto/server/noderesolver"
 
+	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
-)
-
-const (
-	pluginName = "openstack_iid"
 )
 
 var (
@@ -136,14 +133,14 @@ func genSGSelector(sgMapList []map[string]interface{}) ([]*spc.Selector, error) 
 		if sg.ID != "" {
 			sList = append(sList,
 				&spc.Selector{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: fmt.Sprintf("sg:id:%s", sg.ID),
 				})
 		}
 		if sg.Name != "" {
 			sList = append(sList,
 				&spc.Selector{
-					Type:  pluginName,
+					Type:  common.PluginName,
 					Value: fmt.Sprintf("sg:name:%s", sg.Name),
 				})
 		}
@@ -160,7 +157,7 @@ func genCustomMetaSelector(meta map[string]string, acceptKeys []string) []*spc.S
 			if v, ok := meta[key]; ok && v != "" {
 				sList = append(sList,
 					&spc.Selector{
-						Type:  pluginName,
+						Type:  common.PluginName,
 						Value: fmt.Sprintf("meta:%s:%s", key, v),
 					})
 			}
@@ -170,7 +167,7 @@ func genCustomMetaSelector(meta map[string]string, acceptKeys []string) []*spc.S
 			if k != "" && v != "" {
 				sList = append(sList,
 					&spc.Selector{
-						Type:  pluginName,
+						Type:  common.PluginName,
 						Value: fmt.Sprintf("meta:%s:%s", k, v),
 					})
 			}
@@ -205,7 +202,7 @@ func getOpenStackInstance(cloud string) (openstack.InstanceClient, error) {
 func main() {
 	plugin.Serve(&plugin.ServeConfig{
 		Plugins: map[string]plugin.Plugin{
-			pluginName: noderesolver.GRPCPlugin{
+			common.PluginName: noderesolver.GRPCPlugin{
 				ServerImpl: &noderesolver.GRPCServer{
 					Plugin: New(),
 				},
