@@ -1,5 +1,5 @@
-binary_dirs := agent server
-out_dir := bin
+binary_dirs := $(shell cd cmd && find */* -maxdepth 0 -type d)
+out_dir := out/bin
 
 utils = github.com/goreleaser/goreleaser \
 		github.com/golang/dep/cmd/dep
@@ -7,7 +7,7 @@ utils = github.com/goreleaser/goreleaser \
 build: $(binary_dirs)
 
 $(binary_dirs): noop
-	cd cmd/$@ && go build -o ../../$(out_dir)/$@/openstack_iid_attestor  -i
+	cd cmd/$@ && go build -o ../../../$(out_dir)/$@  -i
 
 utils: $(utils)
 

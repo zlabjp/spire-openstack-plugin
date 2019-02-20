@@ -3,6 +3,17 @@
 
 ## Table of Contents
 
+- [plugin.proto](#plugin.proto)
+    - [ConfigureRequest](#spire.common.plugin.ConfigureRequest)
+    - [ConfigureRequest.GlobalConfig](#spire.common.plugin.ConfigureRequest.GlobalConfig)
+    - [ConfigureResponse](#spire.common.plugin.ConfigureResponse)
+    - [GetPluginInfoRequest](#spire.common.plugin.GetPluginInfoRequest)
+    - [GetPluginInfoResponse](#spire.common.plugin.GetPluginInfoResponse)
+  
+  
+  
+  
+
 - [common.proto](#common.proto)
     - [AttestationData](#spire.common.AttestationData)
     - [AttestedNode](#spire.common.AttestedNode)
@@ -19,7 +30,113 @@
   
   
 
+- [noderesolver.proto](#noderesolver.proto)
+    - [ResolveRequest](#spire.server.noderesolver.ResolveRequest)
+    - [ResolveResponse](#spire.server.noderesolver.ResolveResponse)
+    - [ResolveResponse.MapEntry](#spire.server.noderesolver.ResolveResponse.MapEntry)
+  
+  
+  
+    - [NodeResolver](#spire.server.noderesolver.NodeResolver)
+  
+
 - [Scalar Value Types](#scalar-value-types)
+
+
+
+<a name="plugin.proto"/>
+<p align="right"><a href="#top">Top</a></p>
+
+## plugin.proto
+
+
+
+<a name="spire.common.plugin.ConfigureRequest"/>
+
+### ConfigureRequest
+Represents the plugin-specific configuration string.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| configuration | [string](#string) |  | The configuration for the plugin. |
+| globalConfig | [ConfigureRequest.GlobalConfig](#spire.common.plugin.ConfigureRequest.GlobalConfig) |  | Global configurations. |
+
+
+
+
+
+
+<a name="spire.common.plugin.ConfigureRequest.GlobalConfig"/>
+
+### ConfigureRequest.GlobalConfig
+Global configuration nested type.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| trustDomain | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="spire.common.plugin.ConfigureResponse"/>
+
+### ConfigureResponse
+Represents a list of configuration problems
+found in the configuration string.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| errorList | [string](#string) | repeated | A list of errors |
+
+
+
+
+
+
+<a name="spire.common.plugin.GetPluginInfoRequest"/>
+
+### GetPluginInfoRequest
+Represents an empty request.
+
+
+
+
+
+
+<a name="spire.common.plugin.GetPluginInfoResponse"/>
+
+### GetPluginInfoResponse
+Represents the plugin metadata.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  |  |
+| category | [string](#string) |  |  |
+| type | [string](#string) |  |  |
+| description | [string](#string) |  |  |
+| dateCreated | [string](#string) |  |  |
+| location | [string](#string) |  |  |
+| version | [string](#string) |  |  |
+| author | [string](#string) |  |  |
+| company | [string](#string) |  |  |
+
+
+
+
+
+ 
+
+ 
+
+ 
+
+ 
 
 
 
@@ -196,6 +313,80 @@ Represents a type with a list of Selector.
  
 
  
+
+ 
+
+
+
+<a name="noderesolver.proto"/>
+<p align="right"><a href="#top">Top</a></p>
+
+## noderesolver.proto
+
+
+
+<a name="spire.server.noderesolver.ResolveRequest"/>
+
+### ResolveRequest
+Represents a request with a list of BaseSPIFFEIDs.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| baseSpiffeIdList | [string](#string) | repeated | A list of BaseSPIFFE Ids. |
+
+
+
+
+
+
+<a name="spire.server.noderesolver.ResolveResponse"/>
+
+### ResolveResponse
+Represents a response with a map of SPIFFE ID to a list of Selectors.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| map | [ResolveResponse.MapEntry](#spire.server.noderesolver.ResolveResponse.MapEntry) | repeated | Map[SPIFFE_ID] =&gt; Selectors. |
+
+
+
+
+
+
+<a name="spire.server.noderesolver.ResolveResponse.MapEntry"/>
+
+### ResolveResponse.MapEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [.spire.common.Selectors](#spire.server.noderesolver..spire.common.Selectors) |  |  |
+
+
+
+
+
+ 
+
+ 
+
+ 
+
+
+<a name="spire.server.noderesolver.NodeResolver"/>
+
+### NodeResolver
+
+
+| Method Name | Request Type | Response Type | Description |
+| ----------- | ------------ | ------------- | ------------|
+| Resolve | [ResolveRequest](#spire.server.noderesolver.ResolveRequest) | [ResolveResponse](#spire.server.noderesolver.ResolveRequest) | Retrieves a list of properties reflecting the current state of a particular node(s). |
+| Configure | [spire.common.plugin.ConfigureRequest](#spire.common.plugin.ConfigureRequest) | [spire.common.plugin.ConfigureResponse](#spire.common.plugin.ConfigureRequest) | Responsible for configuration of the plugin. |
+| GetPluginInfo | [spire.common.plugin.GetPluginInfoRequest](#spire.common.plugin.GetPluginInfoRequest) | [spire.common.plugin.GetPluginInfoResponse](#spire.common.plugin.GetPluginInfoRequest) | Returns the version and related metadata of the installed plugin. |
 
  
 

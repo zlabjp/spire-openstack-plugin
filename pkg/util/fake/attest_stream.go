@@ -4,11 +4,10 @@ import (
 	"context"
 	"io"
 
-	"github.com/zlabjp/openstack-iid-attestor/pkg/common"
-
 	spc "github.com/spiffe/spire/proto/common"
-
 	"github.com/spiffe/spire/proto/server/nodeattestor"
+
+	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 )
 
 type AttestPluginStream struct {
