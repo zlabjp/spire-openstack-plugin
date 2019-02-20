@@ -11,8 +11,9 @@ import (
 	"github.com/hashicorp/hcl"
 	spi "github.com/spiffe/spire/proto/common/plugin"
 	"github.com/spiffe/spire/proto/server/nodeattestor"
-	"github.com/zlabjp/openstack-iid-attestor/pkg/common"
-	"github.com/zlabjp/openstack-iid-attestor/pkg/openstack"
+
+	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 )
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface

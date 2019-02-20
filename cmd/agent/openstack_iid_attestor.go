@@ -12,8 +12,8 @@ import (
 	spc "github.com/spiffe/spire/proto/common"
 	spi "github.com/spiffe/spire/proto/common/plugin"
 
-	"github.com/zlabjp/openstack-iid-attestor/pkg/common"
-	"github.com/zlabjp/openstack-iid-attestor/pkg/openstack"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 )
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface

@@ -10,8 +10,8 @@ import (
 
 	"github.com/spiffe/spire/proto/common/plugin"
 
-	"github.com/zlabjp/openstack-iid-attestor/pkg/openstack"
-	"github.com/zlabjp/openstack-iid-attestor/pkg/util/fake"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
 )
 
 const (

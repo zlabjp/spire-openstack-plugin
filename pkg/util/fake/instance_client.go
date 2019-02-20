@@ -6,7 +6,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 
-	"github.com/zlabjp/openstack-iid-attestor/pkg/openstack"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 )
 
 type Instance struct {
