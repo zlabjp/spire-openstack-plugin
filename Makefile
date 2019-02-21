@@ -1,13 +1,27 @@
 binary_dirs := $(shell cd cmd && find */* -maxdepth 0 -type d)
 out_dir := out/bin
 
+uname := $(shell uname -s)
+ifeq (${uname},Linux)
+	OS=linux
+endif
+ifeq (${uname},Darwin)
+	OS=darwin
+endif
+
 utils = github.com/goreleaser/goreleaser \
 		github.com/golang/dep/cmd/dep
 
 build: $(binary_dirs)
 
-$(binary_dirs): noop
-	cd cmd/$@ && go build -o ../../../$(out_dir)/$@  -i
+build-linux: OS=linux
+build-linux: build
+
+build-darwin: OS=darwin
+build-darwin: build
+
+$(binary_dirs): clean
+	cd cmd/$@ && GOOS=$(OS) GOARCH=amd64 go build -o ../../../$(out_dir)/$@  -i
 
 utils: $(utils)
 
@@ -30,8 +44,8 @@ release:
 
 clean:
 	go clean ./cmd/... ./pkg/...
-	rm -rf bin
+	rm -rf out
 
 noop:
 
-.PHONY: all build vendor utils test clean
+.PHONY: all build build-linux build-darwin vendor utils test clean
