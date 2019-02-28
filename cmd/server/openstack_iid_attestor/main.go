@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/hcl"
@@ -27,7 +26,6 @@ import (
 type IIDAttestorPlugin struct {
 	config   *IIDAttestorPluginConfig
 	instance openstack.InstanceClient
-	period   time.Duration
 
 	mtx *sync.RWMutex
 
@@ -36,7 +34,6 @@ type IIDAttestorPlugin struct {
 
 type IIDAttestorPluginConfig struct {
 	trustDomain        string
-	AttestationPeriod  string   `hcl:"attestation_period"`
 	CloudName          string   `hcl:"cloud_name"`
 	ProjectIDWhitelist []string `hcl:"projectid_whitelist"`
 }
@@ -69,13 +66,6 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.Attest_PluginStream) erro
 
 	if req.AttestedBefore {
 		return fmt.Errorf("the IID has been used and is no longer valid: %v", iid)
-	}
-
-	if p.period != time.Duration(0) {
-		deadline := s.Created.Add(p.period)
-		if time.Now().After(deadline) {
-			return errors.New("attestation period has expired")
-		}
 	}
 
 	for _, pid := range p.config.ProjectIDWhitelist {
@@ -112,14 +102,6 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	instance, err := p.getInstanceHandler(config.CloudName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare OpenStack Client: %v", err)
-	}
-
-	if config.AttestationPeriod != "" {
-		period, err := time.ParseDuration(config.AttestationPeriod)
-		if err != nil {
-			return nil, fmt.Errorf("invalid value for attestation_period: %v", err)
-		}
-		p.period = period
 	}
 
 	p.instance = instance
