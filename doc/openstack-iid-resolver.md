@@ -15,10 +15,6 @@ The `openstack_iid` resolver plugin resolves OpenStack IID-based SPIFFE ID into 
 
  [^1]: https://developer.openstack.org/api-guide/compute/server_concepts.html#server-metadata
 
-## Diagram
-
-![diagram](images/plugin-diagram.png)
-
 ## Configuration
 
 | key | type | required | description | default |
