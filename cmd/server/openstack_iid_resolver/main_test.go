@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/spiffe/spire/pkg/common/util"
 	spc "github.com/spiffe/spire/proto/common"
 	"github.com/spiffe/spire/proto/common/plugin"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
 )
 
@@ -37,7 +39,7 @@ type fakeInstance struct {
 	errMsg    string
 }
 
-func (i *fakeInstance) getFakeOpenStackInstance(cloud string) (openstack.InstanceClient, error) {
+func (i *fakeInstance) getFakeOpenStackInstance(cloud string, logger hclog.Logger) (openstack.InstanceClient, error) {
 	if i.errMsg != "" {
 		return nil, errors.New(i.errMsg)
 	} else {
@@ -67,6 +69,7 @@ func TestConfigure(t *testing.T) {
 	}
 
 	p := New()
+	p.logger = testutil.TestLogger()
 	p.getInstanceHandler = fi.getFakeOpenStackInstance
 
 	ctx := context.Background()
@@ -85,6 +88,7 @@ func TestConfigureError(t *testing.T) {
 	}
 
 	p := New()
+	p.logger = testutil.TestLogger()
 	p.getInstanceHandler = fi.getFakeOpenStackInstance
 
 	ctx := context.Background()
@@ -219,6 +223,7 @@ func TestResolve(t *testing.T) {
 		}
 
 		p := New()
+		p.logger = testutil.TestLogger()
 		p.getInstanceHandler = fi.getFakeOpenStackInstance
 
 		ctx := context.Background()

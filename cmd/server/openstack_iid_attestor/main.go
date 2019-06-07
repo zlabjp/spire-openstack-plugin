@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/hcl"
 	spi "github.com/spiffe/spire/proto/common/plugin"
@@ -24,16 +25,18 @@ import (
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface
 type IIDAttestorPlugin struct {
+	logger   hclog.Logger
 	config   *IIDAttestorPluginConfig
 	instance openstack.InstanceClient
 
 	mtx *sync.RWMutex
 
-	getInstanceHandler func(string) (openstack.InstanceClient, error)
+	getInstanceHandler func(string, hclog.Logger) (openstack.InstanceClient, error)
 }
 
 type IIDAttestorPluginConfig struct {
 	trustDomain        string
+	LogLevel           string   `hcl:"log_level"`
 	CloudName          string   `hcl:"cloud_name"`
 	ProjectIDWhitelist []string `hcl:"projectid_whitelist"`
 }
@@ -46,6 +49,8 @@ func New() *IIDAttestorPlugin {
 }
 
 func (p *IIDAttestorPlugin) Attest(stream nodeattestor.Attest_PluginStream) error {
+	p.logger.Info("Received attestation request")
+
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
@@ -63,6 +68,8 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.Attest_PluginStream) erro
 	if err != nil {
 		return fmt.Errorf("your IID is invalid: %v", err)
 	}
+
+	p.logger.Debug("Got instance data successfully")
 
 	if req.AttestedBefore {
 		return fmt.Errorf("the IID has been used and is no longer valid: %v", iid)
@@ -99,7 +106,9 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
-	instance, err := p.getInstanceHandler(config.CloudName)
+	p.logger.SetLevel(common.GetLogLevelFromString(config.LogLevel))
+
+	instance, err := p.getInstanceHandler(config.CloudName, p.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare OpenStack Client: %v", err)
 	}
@@ -116,24 +125,32 @@ func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoReq
 }
 
 // getOpenStackInstance returns authenticated openstack compute client.
-func getOpenStackInstance(cloud string) (openstack.InstanceClient, error) {
+func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.InstanceClient, error) {
 	provider, err := openstack.NewProvider(cloud)
 	if err != nil {
 		return nil, err
 	}
-	return openstack.NewInstance(provider)
+	return openstack.NewInstance(provider, logger)
 }
 
 func main() {
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name: common.PluginName,
+	})
+
+	p := New()
+	p.logger = logger
+
 	plugin.Serve(&plugin.ServeConfig{
 		Plugins: map[string]plugin.Plugin{
 			common.PluginName: nodeattestor.GRPCPlugin{
 				ServerImpl: &nodeattestor.GRPCServer{
-					Plugin: New(),
+					Plugin: p,
 				},
 			},
 		},
 		HandshakeConfig: nodeattestor.Handshake,
 		GRPCServer:      plugin.DefaultGRPCServer,
+		Logger:          logger,
 	})
 }

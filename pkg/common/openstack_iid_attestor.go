@@ -10,10 +10,14 @@ package common
 import (
 	"net/url"
 	"path"
+
+	"github.com/hashicorp/go-hclog"
 )
 
 const (
 	PluginName = "openstack_iid"
+
+	defaultLogLevel = "INFO"
 )
 
 func GenerateSpiffeID(trustDomain, projectID, instanceID string) string {
@@ -24,4 +28,14 @@ func GenerateSpiffeID(trustDomain, projectID, instanceID string) string {
 		Path:   spiffePath,
 	}
 	return id.String()
+}
+
+func GetLogLevelFromString(level string) hclog.Level {
+	var logLevel string
+	if level == "" {
+		logLevel = defaultLogLevel
+	} else {
+		logLevel = level
+	}
+	return hclog.LevelFromString(logLevel)
 }

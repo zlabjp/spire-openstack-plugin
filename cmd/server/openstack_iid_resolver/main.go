@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/hashicorp/go-hclog"
+
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/secgroups"
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/hcl"
@@ -33,14 +35,17 @@ var (
 
 // IIDResolverPlugin implements he noderesolver Plugin interface
 type IIDResolverPlugin struct {
+	logger   hclog.Logger
 	config   *IIDResolverPluginConfig
 	instance openstack.InstanceClient
 
 	mu                 sync.RWMutex
-	getInstanceHandler func(string) (openstack.InstanceClient, error)
+	getInstanceHandler func(string, hclog.Logger) (openstack.InstanceClient, error)
 }
 
 type IIDResolverPluginConfig struct {
+	// The threshold for the logger.
+	LogLevel string `hcl:"log_level"`
 	// Name of cloud entry in clouds.yaml to use.
 	CloudName string `hcl:"cloud_name"`
 	// If true, the plugin makes Selector of Custom Meta Data.
@@ -67,7 +72,9 @@ func (p *IIDResolverPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	instance, err := p.getInstanceHandler(config.CloudName)
+	p.logger.SetLevel(common.GetLogLevelFromString(config.LogLevel))
+
+	instance, err := p.getInstanceHandler(config.CloudName, p.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare OpenStack Client: %v", err)
 	}
@@ -78,6 +85,8 @@ func (p *IIDResolverPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 }
 
 func (p *IIDResolverPlugin) Resolve(ctx context.Context, req *noderesolver.ResolveRequest) (*noderesolver.ResolveResponse, error) {
+	p.logger.Info("Received resolve request")
+
 	resp := &noderesolver.ResolveResponse{
 		Map: make(map[string]*spc.Selectors),
 	}
@@ -89,6 +98,7 @@ func (p *IIDResolverPlugin) Resolve(ctx context.Context, req *noderesolver.Resol
 		}
 		resp.Map[spiffeID] = selectors
 	}
+	p.logger.Info("Success in making Selectors")
 
 	return resp, nil
 }
@@ -198,24 +208,32 @@ func genInstanceIDFromSpiffeID(spiffeID string) (string, error) {
 }
 
 // getOpenStackInstance returns authenticated openstack compute client.
-func getOpenStackInstance(cloud string) (openstack.InstanceClient, error) {
+func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.InstanceClient, error) {
 	provider, err := openstack.NewProvider(cloud)
 	if err != nil {
 		return nil, err
 	}
-	return openstack.NewInstance(provider)
+	return openstack.NewInstance(provider, logger)
 }
 
 func main() {
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name: common.PluginName,
+	})
+
+	p := New()
+	p.logger = logger
+
 	plugin.Serve(&plugin.ServeConfig{
 		Plugins: map[string]plugin.Plugin{
 			common.PluginName: noderesolver.GRPCPlugin{
 				ServerImpl: &noderesolver.GRPCServer{
-					Plugin: New(),
+					Plugin: p,
 				},
 			},
 		},
 		HandshakeConfig: noderesolver.Handshake,
 		GRPCServer:      plugin.DefaultGRPCServer,
+		Logger:          logger,
 	})
 }
