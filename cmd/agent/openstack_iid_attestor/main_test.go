@@ -18,6 +18,7 @@ import (
 	"github.com/spiffe/spire/proto/common/plugin"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
 )
 
@@ -26,7 +27,8 @@ func newTestPlugin() *IIDAttestorPlugin {
 		config: &IIDAttestorPluginConfig{
 			trustDomain: "example.com",
 		},
-		mtx: &sync.RWMutex{},
+		mtx:    &sync.RWMutex{},
+		logger: testutil.TestLogger(),
 	}
 }
 

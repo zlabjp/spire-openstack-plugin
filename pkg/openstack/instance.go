@@ -11,6 +11,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/hashicorp/go-hclog"
 )
 
 type InstanceClient interface {
@@ -20,20 +21,23 @@ type InstanceClient interface {
 
 // Instance represents a OpenStack Compute Service client
 type Instance struct {
+	Logger        hclog.Logger
 	serviceClient *gophercloud.ServiceClient
 }
 
 // NewInstance returns a new OpenStack Compute Service client with given provider
-func NewInstance(client *gophercloud.ProviderClient) (InstanceClient, error) {
+func NewInstance(client *gophercloud.ProviderClient, logger hclog.Logger) (InstanceClient, error) {
 	sc, err := openstack.NewComputeV2(client, gophercloud.EndpointOpts{})
 	if err != nil {
 		return nil, err
 	}
 	return &Instance{
+		Logger:        logger,
 		serviceClient: sc,
 	}, nil
 }
 
 func (i *Instance) Get(uuid string) (*servers.Server, error) {
+	i.Logger.Debug("Get Instance Information:", "uuid", uuid)
 	return servers.Get(i.serviceClient, uuid).Extract()
 }

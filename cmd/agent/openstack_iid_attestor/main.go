@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/hcl"
 	"github.com/spiffe/spire/proto/agent/nodeattestor"
@@ -25,6 +26,7 @@ import (
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface
 type IIDAttestorPlugin struct {
+	logger   hclog.Logger
 	config   *IIDAttestorPluginConfig
 	metaData *openstack.Metadata
 
@@ -35,6 +37,7 @@ type IIDAttestorPlugin struct {
 
 type IIDAttestorPluginConfig struct {
 	trustDomain string
+	LogLevel    string `hcl:"log_level"`
 }
 
 func New() *IIDAttestorPlugin {
@@ -60,6 +63,8 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
+	p.logger.SetLevel(common.GetLogLevelFromString(config.LogLevel))
+
 	meta, err := p.getMetadataHandler()
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve openstack metadta: %v", err)
@@ -77,6 +82,8 @@ func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoReq
 }
 
 func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.FetchAttestationData_PluginStream) error {
+	p.logger.Info("Prepare Attestation Request")
+
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
@@ -94,16 +101,24 @@ func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.FetchAttest
 }
 
 func main() {
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name: common.PluginName,
+	})
+
+	p := New()
+	p.logger = logger
+
 	plugin.Serve(&plugin.ServeConfig{
 		Plugins: map[string]plugin.Plugin{
 			common.PluginName: nodeattestor.GRPCPlugin{
 				ServerImpl: &nodeattestor.GRPCServer{
-					Plugin: New(),
+					Plugin: p,
 				},
 			},
 		},
 		GRPCServer:      plugin.DefaultGRPCServer,
 		HandshakeConfig: nodeattestor.Handshake,
+		Logger:          logger,
 	})
 
 }

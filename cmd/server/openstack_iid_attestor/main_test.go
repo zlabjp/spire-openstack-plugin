@@ -13,8 +13,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/spiffe/spire/proto/common/plugin"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
 )
 
@@ -39,13 +41,14 @@ func newTestPlugin() *IIDAttestorPlugin {
 		config: &IIDAttestorPluginConfig{
 			trustDomain: "example.com",
 		},
-		mtx: &sync.RWMutex{},
+		mtx:    &sync.RWMutex{},
+		logger: testutil.TestLogger(),
 	}
 }
 
 func TestConfigure(t *testing.T) {
 	p := newTestPlugin()
-	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
+	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
 		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
 
@@ -60,7 +63,7 @@ func TestConfigure(t *testing.T) {
 
 func TestConfigureError(t *testing.T) {
 	p := newTestPlugin()
-	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
+	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
 		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
 
@@ -75,7 +78,7 @@ func TestConfigureError(t *testing.T) {
 
 func TestConfigureEmptyProjectID(t *testing.T) {
 	p := newTestPlugin()
-	p.getInstanceHandler = func(n string) (openstack.InstanceClient, error) {
+	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
 		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
 
