@@ -38,6 +38,6 @@ func NewInstance(client *gophercloud.ProviderClient, logger hclog.Logger) (Insta
 }
 
 func (i *Instance) Get(uuid string) (*servers.Server, error) {
-	i.Logger.Debug("Get Instance Information:", "uuid", uuid)
+	i.Logger.Debug("Get Instance Information", "uuid", uuid)
 	return servers.Get(i.serviceClient, uuid).Extract()
 }
