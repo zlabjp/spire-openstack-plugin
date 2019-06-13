@@ -126,7 +126,7 @@ func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoReq
 
 // getOpenStackInstance returns authenticated openstack compute client.
 func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.InstanceClient, error) {
-	provider, err := openstack.NewProvider(cloud)
+	provider, err := openstack.NewProvider(cloud, logger)
 	if err != nil {
 		return nil, err
 	}
