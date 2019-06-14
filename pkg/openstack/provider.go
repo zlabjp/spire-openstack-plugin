@@ -101,6 +101,12 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 	}
 	lrt.Logger.Debug("Response Headers", "value", string(info))
 
+	buf := new(bytes.Buffer)
+	if _, err = buf.ReadFrom(response.Body); err != nil {
+		lrt.Logger.Debug("Error logging response body", "error", err)
+	}
+	lrt.Logger.Debug("Response Body", "value", buf.String())
+
 	return response, err
 }
 
