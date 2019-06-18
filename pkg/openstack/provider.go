@@ -10,7 +10,6 @@ package openstack
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -56,9 +55,8 @@ func NewProvider(cloudName string, logger hclog.Logger) (*gophercloud.ProviderCl
 // https://github.com/gophercloud/gophercloud/blob/master/auth_options.go#L73
 // LogRoundTripper satisfies the http.RoundTripper interface
 type LogRoundTripper struct {
-	Logger            hclog.Logger
-	rt                http.RoundTripper
-	numReauthAttempts int
+	Logger hclog.Logger
+	rt     http.RoundTripper
 }
 
 // newHTTPClient return a custom HTTP client that allows for logging relevant
@@ -78,7 +76,7 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 
 	if lrt.Logger.IsDebug() && request.Body != nil {
 		lrt.Logger.Debug("Logging request body...")
-		request.Body, err = lrt.logRequestBody(request.Body, request.Header)
+		request.Body, err = lrt.loggingBody(request.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -97,13 +95,6 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 		return nil, err
 	}
 
-	if response.StatusCode == http.StatusUnauthorized {
-		if lrt.numReauthAttempts == 3 {
-			return response, errors.New("tried to re-authenticate 3 times with no success")
-		}
-		lrt.numReauthAttempts++
-	}
-
 	lrt.Logger.Debug("Response Status", "value", response.Status)
 
 	info, err = json.Marshal(response.Header)
@@ -112,10 +103,17 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 	}
 	lrt.Logger.Debug("Response Headers", "value", string(info))
 
+	if lrt.Logger.IsDebug() && response.Body != nil {
+		response.Body, err = lrt.loggingBody(response.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return response, err
 }
 
-func (lrt *LogRoundTripper) logRequestBody(original io.ReadCloser, headers http.Header) (io.ReadCloser, error) {
+func (lrt *LogRoundTripper) loggingBody(original io.ReadCloser) (io.ReadCloser, error) {
 	defer original.Close()
 
 	var bs bytes.Buffer
