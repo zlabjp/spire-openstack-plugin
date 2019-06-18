@@ -39,6 +39,17 @@ func NewProvider(cloudName string, logger hclog.Logger) (*gophercloud.ProviderCl
 	}
 	provider.HTTPClient = newHTTPClient(logger)
 
+	if provider.ReauthFunc == nil {
+		logger.Debug("ReauthFunc is nil")
+	} else {
+		logger.Debug("Set log into ReauthFunc")
+		rf := provider.ReauthFunc
+		provider.ReauthFunc = func() error {
+			logger.Debug("Proceed to re-authenticate")
+			return rf()
+		}
+	}
+
 	return provider, nil
 }
 
@@ -100,12 +111,6 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 		lrt.Logger.Debug("Error logging response headers", "error", err)
 	}
 	lrt.Logger.Debug("Response Headers", "value", string(info))
-
-	buf := new(bytes.Buffer)
-	if _, err = buf.ReadFrom(response.Body); err != nil {
-		lrt.Logger.Debug("Error logging response body", "error", err)
-	}
-	lrt.Logger.Debug("Response Body", "value", buf.String())
 
 	return response, err
 }
