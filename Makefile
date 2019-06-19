@@ -29,4 +29,4 @@ clean:
 
 noop:
 
-.PHONY: all build build-linux build-darwin vendor utils test clean
+.PHONY: all build build-linux build-darwin test clean
