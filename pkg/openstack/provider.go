@@ -76,7 +76,7 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 
 	if lrt.Logger.IsDebug() && request.Body != nil {
 		lrt.Logger.Debug("Logging request body...")
-		request.Body, err = lrt.loggingBody(request.Body)
+		request.Body, err = lrt.logRequestBody(request.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +104,7 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 	lrt.Logger.Debug("Response Headers", "value", string(info))
 
 	if lrt.Logger.IsDebug() && response.Body != nil {
-		response.Body, err = lrt.loggingBody(response.Body)
+		response.Body, err = lrt.logResponseBody(response.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -113,11 +113,8 @@ func (lrt *LogRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 	return response, err
 }
 
-func (lrt *LogRoundTripper) loggingBody(original io.ReadCloser) (io.ReadCloser, error) {
-	defer original.Close()
-
-	var bs bytes.Buffer
-	_, err := io.Copy(&bs, original)
+func (lrt *LogRoundTripper) logRequestBody(original io.ReadCloser) (io.ReadCloser, error) {
+	bs, err := getCopyBuffer(original)
 	if err != nil {
 		return nil, err
 	}
@@ -125,4 +122,28 @@ func (lrt *LogRoundTripper) loggingBody(original io.ReadCloser) (io.ReadCloser, 
 	lrt.Logger.Debug("Request Options", "value", bs.String())
 
 	return ioutil.NopCloser(strings.NewReader(bs.String())), nil
+}
+
+func (lrt *LogRoundTripper) logResponseBody(original io.ReadCloser) (io.ReadCloser, error) {
+	bs, err := getCopyBuffer(original)
+	if err != nil {
+		return nil, err
+	}
+
+	lrt.Logger.Debug("Response Body", "value", bs.String())
+
+	return ioutil.NopCloser(strings.NewReader(bs.String())), nil
+}
+
+func getCopyBuffer(original io.ReadCloser) (bytes.Buffer, error) {
+	defer original.Close()
+
+	var bs bytes.Buffer
+	_, err := io.Copy(&bs, original)
+	if err != nil {
+		return bs, err
+	}
+
+	return bs, nil
+
 }

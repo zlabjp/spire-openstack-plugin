@@ -21,7 +21,7 @@ build-darwin: OS=darwin
 build-darwin: build
 
 $(binary_dirs): clean
-	cd cmd/$@ && GOOS=$(OS) GOARCH=amd64 go build -o ../../../$(out_dir)/$@  -i
+	cd cmd/$@ && GO111MODULE=on GOOS=$(OS) GOARCH=amd64 go build -o ../../../$(out_dir)/$@  -i
 
 utils: $(utils)
 
