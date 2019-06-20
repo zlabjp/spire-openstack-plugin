@@ -122,7 +122,7 @@ func TestAttestInvalidUUID(t *testing.T) {
 	fs := fake.NewAttestStream(testUUID, false)
 
 	if err := p.Attest(fs); err == nil {
-		t.Errorf("unexpected error from Attest(): %v", err)
+		t.Errorf("an error expected, got nil")
 	} else if err.Error() != fmt.Sprintf("your IID is invalid: %v", errMsg) {
 		t.Errorf("unexpected error messsage: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestAttestInvalidProjectID(t *testing.T) {
 	fs := fake.NewAttestStream(testUUID, false)
 
 	if err := p.Attest(fs); err == nil {
-		t.Errorf("an error expectd, got nil")
+		t.Errorf("an error expected, got nil")
 	} else if err.Error() != "invalid attestation request" {
 		t.Errorf("unexpected error messsage: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestAttestBefore(t *testing.T) {
 	fs := fake.NewAttestStream(testUUID, true)
 
 	if err := p.Attest(fs); err == nil {
-		t.Errorf("an error expectd, got nil")
+		t.Errorf("an error expected, got nil")
 	} else if err.Error() != fmt.Sprintf("the IID has been used and is no longer valid: %v", testUUID) {
 		t.Errorf("unexpected error messsage: %v", err)
 	}
