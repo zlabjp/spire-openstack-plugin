@@ -9,8 +9,8 @@ ifeq (${uname},Darwin)
 	OS=darwin
 endif
 
-utils = github.com/goreleaser/goreleaser \
-		github.com/golang/dep/cmd/dep
+export GO111MODULE=on
+export GOPROXY=https://proxy.golang.org
 
 build: $(binary_dirs)
 
@@ -23,29 +23,11 @@ build-darwin: build
 $(binary_dirs): clean
 	cd cmd/$@ && GOOS=$(OS) GOARCH=amd64 go build -o ../../../$(out_dir)/$@  -i
 
-utils: $(utils)
-
-$(utils): noop
-	go get $@
-
-vendor: Gopkg.lock Gopkg.toml
-	dep ensure
-
-revendor:
-	rm Gopkg.lock Gopkg.toml
-	rm -rf vendor
-	dep init
-
 test:
 	go test -race ./cmd/... ./pkg/...
-
-release:
-	goreleaser || true
 
 clean:
 	go clean ./cmd/... ./pkg/...
 	rm -rf out
 
-noop:
-
-.PHONY: all build build-linux build-darwin vendor utils test clean
+.PHONY: all build build-linux build-darwin test clean

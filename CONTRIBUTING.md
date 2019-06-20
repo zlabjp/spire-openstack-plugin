@@ -6,13 +6,7 @@
 
 ## Building
 
-We use `dep` for vendoring Go dependencies.
-If you add new dependencies, resolve dependencies as follows.
-
-```
-$ make vendor
-```
-
+We use `Go Modules` for vendoring Go dependencies.
 And you can test and build codes as follows.
 
 ```
