@@ -26,13 +26,15 @@ import (
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface
 type IIDAttestorPlugin struct {
-	logger   hclog.Logger
-	config   *IIDAttestorPluginConfig
-	metaData *openstack.Metadata
+	logger     hclog.Logger
+	config     *IIDAttestorPluginConfig
+	metaData   *openstack.Metadata
+	vendordata *openstack.Vendordata2
 
 	mtx *sync.RWMutex
 
-	getMetadataHandler func() (*openstack.Metadata, error)
+	getMetadataHandler   func() (*openstack.Metadata, error)
+	getVendordataHandler func() (*openstack.Vendordata2, error)
 }
 
 type IIDAttestorPluginConfig struct {
@@ -46,12 +48,14 @@ func BuiltIn() catalog.Plugin {
 
 func builtin(p *IIDAttestorPlugin) catalog.Plugin {
 	return catalog.MakePlugin(common.PluginName, nodeattestor.PluginServer(p))
+	UseIID      bool   `hcl:"use_iid"`
 }
 
 func New() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
-		mtx:                &sync.RWMutex{},
-		getMetadataHandler: openstack.GetMetadataFromMetadataService,
+		mtx:                  &sync.RWMutex{},
+		getMetadataHandler:   getMetadata,
+		getVendordataHandler: getVendordata,
 	}
 }
 
@@ -75,8 +79,16 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve openstack metadta: %v", err)
 	}
-
 	p.metaData = meta
+
+	if config.UseIID {
+		v, err := p.getVendordataHandler()
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve openstack metadta: %v", err)
+		}
+		p.vendordata = v
+	}
+
 	config.trustDomain = req.GlobalConfig.TrustDomain
 	p.config = config
 
@@ -93,20 +105,49 @@ func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.NodeAttesto
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
-	if p.config == nil || p.metaData == nil {
+	if p.config == nil || (p.metaData == nil && p.vendordata == nil) {
 		return errors.New("plugin not configured")
+	}
+
+	var data []byte
+	if p.vendordata != nil {
+		data = []byte(p.vendordata.IID.Data)
+	} else {
+		data = []byte(p.metaData.UUID)
 	}
 
 	return stream.Send(&nodeattestor.FetchAttestationDataResponse{
 		AttestationData: &spc.AttestationData{
 			Type: common.PluginName,
-			Data: []byte(p.metaData.UUID),
+			Data: data,
 		},
 	})
 }
 
 func (p *IIDAttestorPlugin) SetLogger(log hclog.Logger) {
 	p.logger = log
+}
+
+func getMetadata() (*openstack.Metadata, error) {
+	c := openstack.NewMetadataClient()
+	c.SetMetadataAsTarget()
+
+	obj, err := c.GetMetadataFromMetadataService()
+	if err != nil {
+		return nil, err
+	}
+	return obj.(*openstack.Metadata), nil
+}
+
+func getVendordata() (*openstack.Vendordata2, error) {
+	c := openstack.NewMetadataClient()
+	c.SetDynamicJSONAsTarget()
+
+	obj, err := c.GetMetadataFromMetadataService()
+	if err != nil {
+		return nil, err
+	}
+	return obj.(*openstack.Vendordata2), nil
 }
 
 func main() {

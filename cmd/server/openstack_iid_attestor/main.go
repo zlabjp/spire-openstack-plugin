@@ -9,12 +9,18 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/hcl"
+	"github.com/lestrrat-go/jwx/jws"
+	spi "github.com/spiffe/spire/proto/common/plugin"
+	"github.com/spiffe/spire/proto/server/nodeattestor"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/server/plugin/nodeattestor"
 	nodeattestorbase "github.com/spiffe/spire/pkg/server/plugin/nodeattestor/base"
@@ -31,10 +37,12 @@ type IIDAttestorPlugin struct {
 	logger   hclog.Logger
 	config   *IIDAttestorPluginConfig
 	instance openstack.InstanceClient
+	metadata openstack.MetadataClient
 
 	mtx *sync.RWMutex
 
-	getInstanceHandler    func(string, hclog.Logger) (openstack.InstanceClient, error)
+	getInstanceHandler func(string, hclog.Logger) (openstack.InstanceClient, error)
+	verifyIIDHandler   func([]byte, openstack.MetadataClient) ([]byte, error)
 	attestedBeforeHandler func(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error)
 }
 
@@ -42,6 +50,7 @@ type IIDAttestorPluginConfig struct {
 	trustDomain        string
 	CloudName          string   `hcl:"cloud_name"`
 	ProjectIDWhitelist []string `hcl:"projectid_whitelist"`
+	UseIID             bool     `hcl:"use_iid"`
 }
 
 // BuiltIn constructs a catalog Plugin using a new instance of this plugin.
@@ -55,8 +64,9 @@ func builtin(p *IIDAttestorPlugin) catalog.Plugin {
 
 func New() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
-		mtx:                   &sync.RWMutex{},
-		getInstanceHandler:    getOpenStackInstance,
+		mtx:                &sync.RWMutex{},
+		getInstanceHandler: getOpenStackInstance,
+		verifyIIDHandler:   verifyIIDSignature,
 		attestedBeforeHandler: attestedBefore,
 	}
 }
@@ -76,10 +86,28 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 		return err
 	}
 
-	iid := string(req.AttestationData.Data)
-	s, err := p.instance.Get(iid)
+	uuid := string(req.AttestationData.Data)
+	if p.config.UseIID {
+		payload, err := p.verifyIIDHandler(req.AttestationData.Data, p.metadata)
+		if err != nil {
+			return fmt.Errorf("AttestationData is invalid: %v", err)
+		}
+
+		p.logger.Debug("IID is valid", "data", string(req.AttestationData.Data))
+
+		pl := &openstack.IIDPayload{}
+		if err := json.Unmarshal(payload, pl); err != nil {
+			return fmt.Errorf("failed to unmarshal IID payload: %v", err)
+		}
+		if pl.InstanceID == "" {
+			return errors.New("InstanceID is empty in the Vendordata2")
+		}
+		uuid = pl.InstanceID
+	}
+
+	s, err := p.instance.Get(uuid)
 	if err != nil {
-		return fmt.Errorf("your IID is invalid: %v", err)
+		return fmt.Errorf("your InstanceID is invalid: %v", err)
 	}
 
 	p.logger.Debug("Got instance data successfully")
@@ -129,7 +157,13 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 		return nil, fmt.Errorf("failed to prepare OpenStack Client: %v", err)
 	}
 
+	metadata := openstack.NewMetadataClient()
+	if config.UseIID {
+		metadata.SetDynamicJSONAsTarget()
+	}
+
 	p.instance = instance
+	p.metadata = metadata
 	config.trustDomain = req.GlobalConfig.TrustDomain
 	p.config = config
 
@@ -156,6 +190,36 @@ func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.Instance
 
 func (p *IIDAttestorPlugin) SetLogger(log hclog.Logger) {
 	p.logger = log
+}
+
+// verifyIIDSignature verifies the input data as JWS.
+// the verify key is fetched from OpenStack Vendordata Dynamic JSON.
+func verifyIIDSignature(data []byte, client openstack.MetadataClient) ([]byte, error) {
+	obj, err := client.GetMetadataFromMetadataService()
+	if err != nil {
+		return nil, err
+	}
+	vd := obj.(*openstack.Vendordata2)
+
+	elem := strings.Split(string(data), ".")
+	encHeader := elem[0]
+
+	h := &jws.StandardHeaders{}
+	header, err := base64.RawURLEncoding.DecodeString(encHeader)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(header), h); err != nil {
+		return nil, err
+	}
+	var kid string
+	if v, ok := h.Get(jws.KeyIDKey); ok {
+		kid = v.(string)
+	} else {
+		return nil, fmt.Errorf("could not find the kid parameter in the header: %v", header)
+	}
+
+	return jws.VerifyWithJWK([]byte(data), vd.IIDKeys.LookupKeyID(kid)[0])
 }
 
 func main() {

@@ -9,12 +9,17 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/spiffe/spire/proto/common/plugin"
 	"github.com/spiffe/spire/proto/spire/common/plugin"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
@@ -54,6 +59,56 @@ func TestConfigure(t *testing.T) {
 	cReq := newConfigureRequest()
 
 	_, err := p.Configure(ctx, cReq)
+	if err != nil {
+		t.Errorf("unexpected error from Configure(): %v", err)
+	}
+}
+
+func TestConfigureUseIID(t *testing.T) {
+	p := newTestPlugin()
+	p.config.UseIID = true
+
+	privKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		t.Errorf("Failed to generate test key")
+	}
+	pubKey := &privKey.PublicKey
+
+	var keys []jwk.Key
+	k, err := jwk.New(pubKey)
+	if err != nil {
+		t.Errorf("Failed to generate jwk")
+	}
+	keys = append(keys, k)
+
+	p.getMetadataHandler = func() (*openstack.Metadata, error) {
+		return &openstack.Metadata{
+			UUID:      "alpha",
+			Name:      "bravo",
+			ProjectID: "charlie",
+		}, nil
+	}
+
+	p.getVendordataHandler = func() (*openstack.Vendordata2, error) {
+		return &openstack.Vendordata2{
+			IID: &openstack.IID{
+				Data: "test-data",
+			},
+			IIDKeys: &openstack.IIDKeys{
+				jwk.Set{
+					Keys: keys,
+				},
+			},
+		}, nil
+	}
+
+	ctx := context.Background()
+	cReq := newConfigureRequest()
+	cReq.Configuration = `
+		use_iid = true
+	`
+
+	_, err = p.Configure(ctx, cReq)
 	if err != nil {
 		t.Errorf("unexpected error from Configure(): %v", err)
 	}
