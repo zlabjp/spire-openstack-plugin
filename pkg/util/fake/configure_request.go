@@ -7,7 +7,7 @@
 
 package fake
 
-import "github.com/spiffe/spire/proto/common/plugin"
+import "github.com/spiffe/spire/proto/spire/common/plugin"
 
 func NewFakeConfigureRequest(g *plugin.ConfigureRequest_GlobalConfig, p string) *plugin.ConfigureRequest {
 	return &plugin.ConfigureRequest{

@@ -19,7 +19,6 @@ The `openstack_iid` resolver plugin resolves OpenStack IID-based SPIFFE ID into 
 
 | key | type | required | description | default |
 |:----|:-----|:---------|:------------|:--------|
-| log_level  | string |   | The threshold for the logging | info |
 | cloud_name | string | ✓ | Name of cloud entry in clouds.yaml to use | |
 | custom_meta_data | bool   |  | Make Selector of Custom Meta Data if true | false |
 | meta_data_keys   | array  |  | If `custom_meta_data` is **true**, the Selector is generated using the specified keys. If it is empty, use all entries | |

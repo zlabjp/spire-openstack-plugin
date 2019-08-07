@@ -13,17 +13,16 @@ import (
 	"regexp"
 	"sync"
 
-	"github.com/hashicorp/go-hclog"
-
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/secgroups"
-	"github.com/hashicorp/go-plugin"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/hcl"
 	"github.com/mitchellh/mapstructure"
+	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/idutil"
 	spu "github.com/spiffe/spire/pkg/common/util"
-	spc "github.com/spiffe/spire/proto/common"
-	spi "github.com/spiffe/spire/proto/common/plugin"
-	"github.com/spiffe/spire/proto/server/noderesolver"
+	spc "github.com/spiffe/spire/proto/spire/common"
+	spi "github.com/spiffe/spire/proto/spire/common/plugin"
+	"github.com/spiffe/spire/proto/spire/server/noderesolver"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
@@ -44,8 +43,6 @@ type IIDResolverPlugin struct {
 }
 
 type IIDResolverPluginConfig struct {
-	// The threshold for the logger.
-	LogLevel string `hcl:"log_level"`
 	// Name of cloud entry in clouds.yaml to use.
 	CloudName string `hcl:"cloud_name"`
 	// If true, the plugin makes Selector of Custom Meta Data.
@@ -53,6 +50,15 @@ type IIDResolverPluginConfig struct {
 	// If CustomMetaData is true, the Selector is generated using the specified keys.
 	// If value is empty, use all entries
 	MetaDataKeys []string `hcl:"meta_data_keys"`
+}
+
+// BuiltIn constructs a catalog Plugin using a new instance of this plugin.
+func BuiltIn() catalog.Plugin {
+	return builtin(New())
+}
+
+func builtin(p *IIDResolverPlugin) catalog.Plugin {
+	return catalog.MakePlugin(common.PluginName, noderesolver.PluginServer(p))
 }
 
 // New returns a *IIDResolverPlugin with default getOpenStackHandler
@@ -71,8 +77,6 @@ func (p *IIDResolverPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
-	p.logger.SetLevel(common.GetLogLevelFromString(config.LogLevel))
 
 	instance, err := p.getInstanceHandler(config.CloudName, p.logger)
 	if err != nil {
@@ -216,24 +220,10 @@ func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.Instance
 	return openstack.NewInstance(provider, logger)
 }
 
+func (p *IIDResolverPlugin) SetLogger(log hclog.Logger) {
+	p.logger = log
+}
+
 func main() {
-	logger := hclog.New(&hclog.LoggerOptions{
-		Name: common.PluginName,
-	})
-
-	p := New()
-	p.logger = logger
-
-	plugin.Serve(&plugin.ServeConfig{
-		Plugins: map[string]plugin.Plugin{
-			common.PluginName: noderesolver.GRPCPlugin{
-				ServerImpl: &noderesolver.GRPCServer{
-					Plugin: p,
-				},
-			},
-		},
-		HandshakeConfig: noderesolver.Handshake,
-		GRPCServer:      plugin.DefaultGRPCServer,
-		Logger:          logger,
-	})
+	catalog.PluginMain(BuiltIn())
 }
