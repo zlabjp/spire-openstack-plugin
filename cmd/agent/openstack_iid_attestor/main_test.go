@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/spiffe/spire/proto/common/plugin"
+	"github.com/spiffe/spire/proto/spire/common/plugin"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"

@@ -11,8 +11,10 @@ import (
 	"context"
 	"io"
 
-	spc "github.com/spiffe/spire/proto/common"
-	"github.com/spiffe/spire/proto/server/nodeattestor"
+	"google.golang.org/grpc"
+
+	spc "github.com/spiffe/spire/proto/spire/common"
+	"github.com/spiffe/spire/proto/spire/server/nodeattestor"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 )
@@ -20,16 +22,16 @@ import (
 type AttestPluginStream struct {
 	req  *nodeattestor.AttestRequest
 	resp *nodeattestor.AttestResponse
+	grpc.ServerStream
 }
 
-func NewAttestStream(uuid string, attestedBefore bool) *AttestPluginStream {
+func NewAttestStream(uuid string) *AttestPluginStream {
 	return &AttestPluginStream{
 		req: &nodeattestor.AttestRequest{
 			AttestationData: &spc.AttestationData{
 				Type: common.PluginName,
 				Data: []byte(uuid),
 			},
-			AttestedBefore: attestedBefore,
 		},
 	}
 }

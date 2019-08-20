@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/spiffe/spire/proto/common/plugin"
+	"github.com/spiffe/spire/proto/spire/common/plugin"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
@@ -46,11 +46,20 @@ func newTestPlugin() *IIDAttestorPlugin {
 	}
 }
 
+func notAttestedBeforeHandler(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error) {
+	return false, nil
+}
+
+func onceAttestedBeforeHandler(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error) {
+	return true, nil
+}
+
 func TestConfigure(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
 		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
+	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	ctx := context.Background()
 	req := fake.NewFakeConfigureRequest(globalConfig, pluginConfig)
@@ -66,6 +75,7 @@ func TestConfigureError(t *testing.T) {
 	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
 		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
+	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	ctx := context.Background()
 	req := fake.NewFakeConfigureRequest(globalConfig, "invalid config")
@@ -81,6 +91,7 @@ func TestConfigureEmptyProjectID(t *testing.T) {
 	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
 		return fake.NewInstance(testProjectID, nil, nil), nil
 	}
+	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	conf := `
 	cloud_name = "test"
@@ -104,8 +115,9 @@ func TestAttest(t *testing.T) {
 	p := newTestPlugin()
 	p.instance = fi
 	p.config.ProjectIDWhitelist = []string{testProjectID}
+	p.attestedBeforeHandler = notAttestedBeforeHandler
 
-	fs := fake.NewAttestStream(testUUID, false)
+	fs := fake.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err != nil {
 		t.Errorf("Attestation error: %v", err)
@@ -118,8 +130,9 @@ func TestAttestInvalidUUID(t *testing.T) {
 
 	p := newTestPlugin()
 	p.instance = fi
+	p.attestedBeforeHandler = notAttestedBeforeHandler
 
-	fs := fake.NewAttestStream(testUUID, false)
+	fs := fake.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expected, got nil")
@@ -134,8 +147,9 @@ func TestAttestInvalidProjectID(t *testing.T) {
 	p := newTestPlugin()
 	p.instance = fi
 	p.config.ProjectIDWhitelist = []string{testProjectID}
+	p.attestedBeforeHandler = notAttestedBeforeHandler
 
-	fs := fake.NewAttestStream(testUUID, false)
+	fs := fake.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expected, got nil")
@@ -151,11 +165,13 @@ func TestAttestBefore(t *testing.T) {
 	p.instance = fi
 	p.config.ProjectIDWhitelist = []string{testProjectID}
 
-	fs := fake.NewAttestStream(testUUID, true)
+	p.attestedBeforeHandler = onceAttestedBeforeHandler
+
+	fs := fake.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expected, got nil")
-	} else if err.Error() != fmt.Sprintf("the IID has been used and is no longer valid: %v", testUUID) {
+	} else if err.Error() != fmt.Sprintf("IID has already been used to attest an agent: %v", testUUID) {
 		t.Errorf("unexpected error messsage: %v", err)
 	}
 }

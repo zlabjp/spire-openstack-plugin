@@ -14,11 +14,11 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/hcl"
-	"github.com/spiffe/spire/proto/agent/nodeattestor"
-	spc "github.com/spiffe/spire/proto/common"
-	spi "github.com/spiffe/spire/proto/common/plugin"
+	"github.com/spiffe/spire/pkg/common/catalog"
+	"github.com/spiffe/spire/proto/spire/agent/nodeattestor"
+	spc "github.com/spiffe/spire/proto/spire/common"
+	spi "github.com/spiffe/spire/proto/spire/common/plugin"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
@@ -37,7 +37,15 @@ type IIDAttestorPlugin struct {
 
 type IIDAttestorPluginConfig struct {
 	trustDomain string
-	LogLevel    string `hcl:"log_level"`
+}
+
+// BuiltIn constructs a catalog Plugin using a new instance of this plugin.
+func BuiltIn() catalog.Plugin {
+	return builtin(New())
+}
+
+func builtin(p *IIDAttestorPlugin) catalog.Plugin {
+	return catalog.MakePlugin(common.PluginName, nodeattestor.PluginServer(p))
 }
 
 func New() *IIDAttestorPlugin {
@@ -63,8 +71,6 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
-	p.logger.SetLevel(common.GetLogLevelFromString(config.LogLevel))
-
 	meta, err := p.getMetadataHandler()
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve openstack metadta: %v", err)
@@ -81,7 +87,7 @@ func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoReq
 	return &spi.GetPluginInfoResponse{}, nil
 }
 
-func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.FetchAttestationData_PluginStream) error {
+func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
 	p.logger.Info("Prepare Attestation Request")
 
 	p.mtx.RLock()
@@ -96,29 +102,13 @@ func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.FetchAttest
 			Type: common.PluginName,
 			Data: []byte(p.metaData.UUID),
 		},
-		SpiffeId: common.GenerateSpiffeID(p.config.trustDomain, p.metaData.ProjectID, p.metaData.UUID),
 	})
 }
 
+func (p *IIDAttestorPlugin) SetLogger(log hclog.Logger) {
+	p.logger = log
+}
+
 func main() {
-	logger := hclog.New(&hclog.LoggerOptions{
-		Name: common.PluginName,
-	})
-
-	p := New()
-	p.logger = logger
-
-	plugin.Serve(&plugin.ServeConfig{
-		Plugins: map[string]plugin.Plugin{
-			common.PluginName: nodeattestor.GRPCPlugin{
-				ServerImpl: &nodeattestor.GRPCServer{
-					Plugin: p,
-				},
-			},
-		},
-		GRPCServer:      plugin.DefaultGRPCServer,
-		HandshakeConfig: nodeattestor.Handshake,
-		Logger:          logger,
-	})
-
+	catalog.PluginMain(BuiltIn())
 }

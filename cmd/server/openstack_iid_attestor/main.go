@@ -14,10 +14,11 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/hcl"
-	spi "github.com/spiffe/spire/proto/common/plugin"
-	"github.com/spiffe/spire/proto/server/nodeattestor"
+	"github.com/spiffe/spire/pkg/common/catalog"
+	nodeattestorbase "github.com/spiffe/spire/pkg/server/plugin/nodeattestor/base"
+	spi "github.com/spiffe/spire/proto/spire/common/plugin"
+	"github.com/spiffe/spire/proto/spire/server/nodeattestor"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
@@ -25,30 +26,42 @@ import (
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface
 type IIDAttestorPlugin struct {
+	nodeattestorbase.Base
+
 	logger   hclog.Logger
 	config   *IIDAttestorPluginConfig
 	instance openstack.InstanceClient
 
 	mtx *sync.RWMutex
 
-	getInstanceHandler func(string, hclog.Logger) (openstack.InstanceClient, error)
+	getInstanceHandler    func(string, hclog.Logger) (openstack.InstanceClient, error)
+	attestedBeforeHandler func(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error)
 }
 
 type IIDAttestorPluginConfig struct {
 	trustDomain        string
-	LogLevel           string   `hcl:"log_level"`
 	CloudName          string   `hcl:"cloud_name"`
 	ProjectIDWhitelist []string `hcl:"projectid_whitelist"`
 }
 
+// BuiltIn constructs a catalog Plugin using a new instance of this plugin.
+func BuiltIn() catalog.Plugin {
+	return builtin(New())
+}
+
+func builtin(p *IIDAttestorPlugin) catalog.Plugin {
+	return catalog.MakePlugin(common.PluginName, nodeattestor.PluginServer(p))
+}
+
 func New() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
-		mtx:                &sync.RWMutex{},
-		getInstanceHandler: getOpenStackInstance,
+		mtx:                   &sync.RWMutex{},
+		getInstanceHandler:    getOpenStackInstance,
+		attestedBeforeHandler: attestedBefore,
 	}
 }
 
-func (p *IIDAttestorPlugin) Attest(stream nodeattestor.Attest_PluginStream) error {
+func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer) error {
 	p.logger.Info("Received attestation request")
 
 	p.mtx.RLock()
@@ -71,15 +84,20 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.Attest_PluginStream) erro
 
 	p.logger.Debug("Got instance data successfully")
 
-	if req.AttestedBefore {
-		return fmt.Errorf("the IID has been used and is no longer valid: %v", iid)
+	agentID := common.GenerateSpiffeID(p.config.trustDomain, s.TenantID, iid)
+
+	attested, err := p.attestedBeforeHandler(p, stream.Context(), agentID)
+	switch {
+	case err != nil:
+		return err
+	case attested:
+		return fmt.Errorf("IID has already been used to attest an agent: %v", iid)
 	}
 
 	for _, pid := range p.config.ProjectIDWhitelist {
 		if s.TenantID == pid {
 			resp := &nodeattestor.AttestResponse{
-				Valid:        true,
-				BaseSPIFFEID: common.GenerateSpiffeID(p.config.trustDomain, s.TenantID, iid),
+				AgentId: agentID,
 			}
 			return stream.Send(resp)
 		}
@@ -106,8 +124,6 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
-	p.logger.SetLevel(common.GetLogLevelFromString(config.LogLevel))
-
 	instance, err := p.getInstanceHandler(config.CloudName, p.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare OpenStack Client: %v", err)
@@ -124,6 +140,11 @@ func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoReq
 	return &spi.GetPluginInfoResponse{}, nil
 }
 
+// attestedBefore returns true if given agentID attested before
+func attestedBefore(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error) {
+	return p.IsAttested(ctx, agentID)
+}
+
 // getOpenStackInstance returns authenticated openstack compute client.
 func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.InstanceClient, error) {
 	provider, err := openstack.NewProvider(cloud)
@@ -133,24 +154,10 @@ func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.Instance
 	return openstack.NewInstance(provider, logger)
 }
 
+func (p *IIDAttestorPlugin) SetLogger(log hclog.Logger) {
+	p.logger = log
+}
+
 func main() {
-	logger := hclog.New(&hclog.LoggerOptions{
-		Name: common.PluginName,
-	})
-
-	p := New()
-	p.logger = logger
-
-	plugin.Serve(&plugin.ServeConfig{
-		Plugins: map[string]plugin.Plugin{
-			common.PluginName: nodeattestor.GRPCPlugin{
-				ServerImpl: &nodeattestor.GRPCServer{
-					Plugin: p,
-				},
-			},
-		},
-		HandshakeConfig: nodeattestor.Handshake,
-		GRPCServer:      plugin.DefaultGRPCServer,
-		Logger:          logger,
-	})
+	catalog.PluginMain(BuiltIn())
 }

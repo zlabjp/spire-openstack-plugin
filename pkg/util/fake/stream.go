@@ -11,7 +11,9 @@ import (
 	"context"
 	"io"
 
-	"github.com/spiffe/spire/proto/agent/nodeattestor"
+	"google.golang.org/grpc"
+
+	"github.com/spiffe/spire/proto/spire/agent/nodeattestor"
 )
 
 var (
@@ -21,6 +23,7 @@ var (
 type FakeFetchAttestationDataStream struct {
 	req  *nodeattestor.FetchAttestationDataRequest
 	resp *nodeattestor.FetchAttestationDataResponse
+	grpc.ServerStream
 }
 
 func NewFakeFetchAttestationStream() *FakeFetchAttestationDataStream {

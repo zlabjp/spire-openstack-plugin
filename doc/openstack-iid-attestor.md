@@ -26,7 +26,6 @@ plugins {
         plugin_cmd = "/path/to/plugin_cmd"
         plugin_checksum = "(SHOULD) sha256 of the plugin binary"
         plugin_data {
-            log_level  = "debug"
             cloud_name = "test"
             projectid_whitelist = ["123", "abc"]
         }
@@ -36,7 +35,6 @@ plugins {
 
 | key | type | required | description | example |
 |:----|:-----|:---------|:------------|:--------|
-| log_level  | string |   | The threshold for the logging | info |
 | cloud_name | string | ✓ | Name of cloud entry in clouds.yaml to use |  |
 | projectid_whitelist | array | ✓ | List of authorized ProjectIDs | |
 
@@ -58,15 +56,10 @@ plugins {
         plugin_cmd = "/path/to/plugin_cmd"
         plugin_checksum = "(SHOULD) sha256 of the plugin binary"
         plugin_data {
-            log_level = "debug"
         }
     }
 ...
 ```
-
-| key | type | required | description | example |
-|:----|:-----|:---------|:------------|:--------|
-| log_level  | string |   | The threshold for the logging | info |
 
 The plugin_name should be "openstack_iid" and matches the name used in plugin config. The plugin_cmd should specify the path to the agent binary.
 
