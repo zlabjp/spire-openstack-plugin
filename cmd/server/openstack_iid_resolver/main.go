@@ -20,9 +20,9 @@ import (
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/idutil"
 	spu "github.com/spiffe/spire/pkg/common/util"
+	"github.com/spiffe/spire/pkg/server/plugin/noderesolver"
 	spc "github.com/spiffe/spire/proto/spire/common"
 	spi "github.com/spiffe/spire/proto/spire/common/plugin"
-	"github.com/spiffe/spire/proto/spire/server/noderesolver"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
