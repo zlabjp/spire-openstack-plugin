@@ -16,9 +16,9 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/hcl"
 	"github.com/spiffe/spire/pkg/common/catalog"
+	"github.com/spiffe/spire/pkg/server/plugin/nodeattestor"
 	nodeattestorbase "github.com/spiffe/spire/pkg/server/plugin/nodeattestor/base"
 	spi "github.com/spiffe/spire/proto/spire/common/plugin"
-	"github.com/spiffe/spire/proto/spire/server/nodeattestor"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
