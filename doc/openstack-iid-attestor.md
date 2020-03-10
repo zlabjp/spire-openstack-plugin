@@ -70,6 +70,10 @@ As a mitigation measure, re-attestation of the same instance is prohibited.
 In the future, if it is possible to acquire more information that can attest the agent from OpenStack or Plugin feature, it is possible to more strictly identify the agent.
 For instance, in the Server Plugin, it is conceivable to compare the IP address of the request source with the IP address associated with the instance obtainable from the instance metadata.
 
+### Request for Comment
+We propose the [OpenStack IID](https://docs.google.com/document/d/1HkK3Q74yYiqckBMI-h9FrZdlWEkrY5R4uHbXRqSRlW8) to mitigate the risk.  
+[Here](https://github.com/zlabjp/spire-openstack-plugin/tree/poc-dynamic-json) are the PoC files.
+
 ## Re-Attestation the instance
 If you need to re-attestation the instance which is attested before, you need to evict the entry.
 
