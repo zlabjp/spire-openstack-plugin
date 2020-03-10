@@ -19,8 +19,6 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/hcl"
 	"github.com/lestrrat-go/jwx/jws"
-	spi "github.com/spiffe/spire/proto/common/plugin"
-	"github.com/spiffe/spire/proto/server/nodeattestor"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/server/plugin/nodeattestor"
 	nodeattestorbase "github.com/spiffe/spire/pkg/server/plugin/nodeattestor/base"
@@ -41,8 +39,8 @@ type IIDAttestorPlugin struct {
 
 	mtx *sync.RWMutex
 
-	getInstanceHandler func(string, hclog.Logger) (openstack.InstanceClient, error)
-	verifyIIDHandler   func([]byte, openstack.MetadataClient) ([]byte, error)
+	getInstanceHandler    func(string, hclog.Logger) (openstack.InstanceClient, error)
+	verifyIIDHandler      func([]byte, openstack.MetadataClient) ([]byte, error)
 	attestedBeforeHandler func(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error)
 }
 
@@ -64,9 +62,9 @@ func builtin(p *IIDAttestorPlugin) catalog.Plugin {
 
 func New() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
-		mtx:                &sync.RWMutex{},
-		getInstanceHandler: getOpenStackInstance,
-		verifyIIDHandler:   verifyIIDSignature,
+		mtx:                   &sync.RWMutex{},
+		getInstanceHandler:    getOpenStackInstance,
+		verifyIIDHandler:      verifyIIDSignature,
 		attestedBeforeHandler: attestedBefore,
 	}
 }
@@ -112,14 +110,14 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 
 	p.logger.Debug("Got instance data successfully")
 
-	agentID := common.GenerateSpiffeID(p.config.trustDomain, s.TenantID, iid)
+	agentID := common.GenerateSpiffeID(p.config.trustDomain, s.TenantID, uuid)
 
 	attested, err := p.attestedBeforeHandler(p, stream.Context(), agentID)
 	switch {
 	case err != nil:
 		return err
 	case attested:
-		return fmt.Errorf("IID has already been used to attest an agent: %v", iid)
+		return fmt.Errorf("IID has already been used to attest an agent: %v", uuid)
 	}
 
 	for _, pid := range p.config.ProjectIDWhitelist {

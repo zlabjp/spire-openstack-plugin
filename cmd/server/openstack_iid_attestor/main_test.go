@@ -20,7 +20,6 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/spiffe/spire/proto/common/plugin"
 	"github.com/spiffe/spire/proto/spire/common/plugin"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"
@@ -138,6 +137,7 @@ func TestAttestUseIID(t *testing.T) {
 	p.instance = fi
 	p.config.ProjectIDWhitelist = []string{testProjectID}
 	p.config.UseIID = true
+	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	privKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
@@ -163,7 +163,7 @@ func TestAttestUseIID(t *testing.T) {
 	p.metadata = mc
 	p.verifyIIDHandler = verifyIIDSignature
 
-	fs := fake.NewAttestStream(iid.Data, false)
+	fs := fake.NewAttestStream(iid.Data)
 
 	if err := p.Attest(fs); err != nil {
 		t.Errorf("unexpected error from Attest(): %v", err)
@@ -201,7 +201,7 @@ func TestAttestUseIIDWithInvalidData(t *testing.T) {
 	p.metadata = mc
 	p.verifyIIDHandler = verifyIIDSignature
 
-	fs := fake.NewAttestStream(iid.Data, false)
+	fs := fake.NewAttestStream(iid.Data)
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expectd, got nil")
@@ -222,7 +222,7 @@ func TestAttestInvalidUUID(t *testing.T) {
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expected, got nil")
-	} else if err.Error() != fmt.Sprintf("your IID is invalid: %v", errMsg) {
+	} else if err.Error() != fmt.Sprintf("your InstanceID is invalid: %v", errMsg) {
 		t.Errorf("unexpected error messsage: %v", err)
 	}
 }

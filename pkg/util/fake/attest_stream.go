@@ -25,12 +25,12 @@ type AttestPluginStream struct {
 	grpc.ServerStream
 }
 
-func NewAttestStream(data string, attestedBefore bool) *AttestPluginStream {
+func NewAttestStream(uuid string) *AttestPluginStream {
 	return &AttestPluginStream{
 		req: &nodeattestor.AttestRequest{
 			AttestationData: &spc.AttestationData{
 				Type: common.PluginName,
-				Data: []byte(data),
+				Data: []byte(uuid),
 			},
 		},
 	}

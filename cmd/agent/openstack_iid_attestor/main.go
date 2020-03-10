@@ -39,6 +39,7 @@ type IIDAttestorPlugin struct {
 
 type IIDAttestorPluginConfig struct {
 	trustDomain string
+	UseIID      bool `hcl:"use_iid"`
 }
 
 // BuiltIn constructs a catalog Plugin using a new instance of this plugin.
@@ -48,7 +49,6 @@ func BuiltIn() catalog.Plugin {
 
 func builtin(p *IIDAttestorPlugin) catalog.Plugin {
 	return catalog.MakePlugin(common.PluginName, nodeattestor.PluginServer(p))
-	UseIID      bool   `hcl:"use_iid"`
 }
 
 func New() *IIDAttestorPlugin {
@@ -58,7 +58,6 @@ func New() *IIDAttestorPlugin {
 		getVendordataHandler: getVendordata,
 	}
 }
-
 func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
 	config := &IIDAttestorPluginConfig{}
 	if err := hcl.Decode(config, req.Configuration); err != nil {
