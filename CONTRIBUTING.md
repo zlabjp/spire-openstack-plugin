@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Go 1.13 or higher
+- Go 1.14 or higher
 
 ## Building
 

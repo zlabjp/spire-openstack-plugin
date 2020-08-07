@@ -11,10 +11,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/hcl"
 	"github.com/spiffe/spire/pkg/agent/plugin/nodeattestor"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	spc "github.com/spiffe/spire/proto/spire/common"
@@ -26,17 +24,9 @@ import (
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface
 type IIDAttestorPlugin struct {
-	logger   hclog.Logger
-	config   *IIDAttestorPluginConfig
-	metaData *openstack.Metadata
-
-	mtx *sync.RWMutex
+	logger hclog.Logger
 
 	getMetadataHandler func() (*openstack.Metadata, error)
-}
-
-type IIDAttestorPluginConfig struct {
-	trustDomain string
 }
 
 // BuiltIn constructs a catalog Plugin using a new instance of this plugin.
@@ -50,36 +40,11 @@ func builtin(p *IIDAttestorPlugin) catalog.Plugin {
 
 func New() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
-		mtx:                &sync.RWMutex{},
 		getMetadataHandler: openstack.GetMetadataFromMetadataService,
 	}
 }
 
 func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
-	config := &IIDAttestorPluginConfig{}
-	if err := hcl.Decode(config, req.Configuration); err != nil {
-		return nil, fmt.Errorf("failed to decode configuration file: %v", err)
-	}
-
-	if req.GlobalConfig == nil {
-		return nil, errors.New("global configuration is required")
-	}
-	if req.GlobalConfig.TrustDomain == "" {
-		return nil, errors.New("trust_domain is required")
-	}
-
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-
-	meta, err := p.getMetadataHandler()
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve openstack metadta: %v", err)
-	}
-
-	p.metaData = meta
-	config.trustDomain = req.GlobalConfig.TrustDomain
-	p.config = config
-
 	return &spi.ConfigureResponse{}, nil
 }
 
@@ -90,17 +55,18 @@ func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoReq
 func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
 	p.logger.Info("Prepare Attestation Request")
 
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
-
-	if p.config == nil || p.metaData == nil {
-		return errors.New("plugin not configured")
+	if p.getMetadataHandler == nil {
+		return errors.New("handler not found, plugin not initialized")
 	}
 
+	meta, err := p.getMetadataHandler()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve openstack metadata: %v", err)
+	}
 	return stream.Send(&nodeattestor.FetchAttestationDataResponse{
 		AttestationData: &spc.AttestationData{
 			Type: common.PluginName,
-			Data: []byte(p.metaData.UUID),
+			Data: []byte(meta.UUID),
 		},
 	})
 }

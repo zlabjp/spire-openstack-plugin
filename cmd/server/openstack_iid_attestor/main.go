@@ -41,7 +41,7 @@ type IIDAttestorPlugin struct {
 type IIDAttestorPluginConfig struct {
 	trustDomain        string
 	CloudName          string   `hcl:"cloud_name"`
-	ProjectIDWhitelist []string `hcl:"projectid_whitelist"`
+	ProjectIDAllowList []string `hcl:"projectid_allow_list"`
 }
 
 // BuiltIn constructs a catalog Plugin using a new instance of this plugin.
@@ -64,11 +64,13 @@ func New() *IIDAttestorPlugin {
 func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer) error {
 	p.logger.Info("Received attestation request")
 
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
+	config, err := p.getConfig()
+	if err != nil {
+		return err
+	}
 
 	if p.instance == nil {
-		return errors.New("plugin not configured")
+		return errors.New("openstack instance client not configured")
 	}
 
 	req, err := stream.Recv()
@@ -84,7 +86,7 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 
 	p.logger.Debug("Got instance data successfully")
 
-	agentID := common.GenerateSpiffeID(p.config.trustDomain, s.TenantID, iid)
+	agentID := common.GenerateSpiffeID(config.trustDomain, s.TenantID, iid)
 
 	attested, err := p.attestedBeforeHandler(p, stream.Context(), agentID)
 	switch {
@@ -94,7 +96,7 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 		return fmt.Errorf("IID has already been used to attest an agent: %v", iid)
 	}
 
-	for _, pid := range p.config.ProjectIDWhitelist {
+	for _, pid := range config.ProjectIDAllowList {
 		if s.TenantID == pid {
 			resp := &nodeattestor.AttestResponse{
 				AgentId: agentID,
@@ -107,6 +109,10 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 }
 
 func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
+	if p.getInstanceHandler == nil {
+		return nil, errors.New("handler not found, plugin not initialized")
+	}
+
 	config := &IIDAttestorPluginConfig{}
 	if err := hcl.Decode(config, req.Configuration); err != nil {
 		return nil, fmt.Errorf("failed to decode configuration file: %v", err)
@@ -117,12 +123,9 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	if req.GlobalConfig.TrustDomain == "" {
 		return nil, errors.New("trust_domain is required")
 	}
-	if len(config.ProjectIDWhitelist) == 0 {
-		return nil, errors.New("projectid_whitelist is required")
+	if len(config.ProjectIDAllowList) == 0 {
+		return nil, errors.New("projectid_allow_list is required")
 	}
-
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
 
 	instance, err := p.getInstanceHandler(config.CloudName, p.logger)
 	if err != nil {
@@ -131,7 +134,8 @@ func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 
 	p.instance = instance
 	config.trustDomain = req.GlobalConfig.TrustDomain
-	p.config = config
+
+	p.setConfig(config)
 
 	return &spi.ConfigureResponse{}, nil
 }
@@ -156,6 +160,22 @@ func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.Instance
 
 func (p *IIDAttestorPlugin) SetLogger(log hclog.Logger) {
 	p.logger = log
+}
+
+func (p *IIDAttestorPlugin) setConfig(config *IIDAttestorPluginConfig) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.config = config
+}
+
+func (p *IIDAttestorPlugin) getConfig() (*IIDAttestorPluginConfig, error) {
+	p.mtx.RLock()
+	defer p.mtx.RUnlock()
+
+	if p.config == nil {
+		return nil, errors.New("plugin not configured")
+	}
+	return p.config, nil
 }
 
 func main() {

@@ -26,7 +26,7 @@ const (
 
 	pluginConfig = `
 	cloud_name = "test"
-	projectid_whitelist = ["alpha", "bravo"]
+	projectid_allow_list = ["alpha", "bravo"]
 	`
 )
 
@@ -100,7 +100,7 @@ func TestConfigureEmptyProjectID(t *testing.T) {
 	ctx := context.Background()
 	req := fake.NewFakeConfigureRequest(globalConfig, conf)
 
-	wantError := "projectid_whitelist is required"
+	wantError := "projectid_allow_list is required"
 	_, err := p.Configure(ctx, req)
 	if err == nil {
 		t.Error("expected error, got nil")
@@ -114,7 +114,7 @@ func TestAttest(t *testing.T) {
 
 	p := newTestPlugin()
 	p.instance = fi
-	p.config.ProjectIDWhitelist = []string{testProjectID}
+	p.config.ProjectIDAllowList = []string{testProjectID}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	fs := fake.NewAttestStream(testUUID)
@@ -146,7 +146,7 @@ func TestAttestInvalidProjectID(t *testing.T) {
 
 	p := newTestPlugin()
 	p.instance = fi
-	p.config.ProjectIDWhitelist = []string{testProjectID}
+	p.config.ProjectIDAllowList = []string{testProjectID}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	fs := fake.NewAttestStream(testUUID)
@@ -163,7 +163,7 @@ func TestAttestBefore(t *testing.T) {
 
 	p := newTestPlugin()
 	p.instance = fi
-	p.config.ProjectIDWhitelist = []string{testProjectID}
+	p.config.ProjectIDAllowList = []string{testProjectID}
 
 	p.attestedBeforeHandler = onceAttestedBeforeHandler
 

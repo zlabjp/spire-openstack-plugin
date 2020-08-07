@@ -2,7 +2,7 @@
 
 ## Overview
 
-The OpenStack InstanceID(IID) attestor is a plugin for the SPIRE Agent and SPIRE Server that allows SPIRE to automatically attest instances using the OpenStack Instance Metadata API. Agents attested by the `openstack_iid` attestor will be issued a SPIFFE ID like `spiffe://TRUST_DOMAIN/agent/openstack_iid/PROJECT_ID/INSTANCE_ID`. This plugin requires a whitelist of ProjectID from which nodes can be attested. This also means that you shouldn't run multiple trust domains from the same OpenStack Project(**TBD**).
+The OpenStack InstanceID(IID) attestor is a plugin for the SPIRE Agent and SPIRE Server that allows SPIRE to automatically attest instances using the OpenStack Instance Metadata API. Agents attested by the `openstack_iid` attestor will be issued a SPIFFE ID like `spiffe://TRUST_DOMAIN/spire/agent/openstack_iid/PROJECT_ID/INSTANCE_ID`. This plugin requires a allow-list of ProjectID from which nodes can be attested. This also means that you shouldn't run multiple trust domains from the same OpenStack Project(**TBD**).
 
 ## Base SVID SPIFFE ID Format
 
@@ -27,7 +27,7 @@ plugins {
         plugin_checksum = "(SHOULD) sha256 of the plugin binary"
         plugin_data {
             cloud_name = "test"
-            projectid_whitelist = ["123", "abc"]
+            projectid_allow_list = ["123", "abc"]
         }
     }
 ...
@@ -36,7 +36,7 @@ plugins {
 | key | type | required | description | example |
 |:----|:-----|:---------|:------------|:--------|
 | cloud_name | string | ✓ | Name of cloud entry in clouds.yaml to use |  |
-| projectid_whitelist | array | ✓ | List of authorized ProjectIDs | |
+| projectid_allow_list | array | ✓ | List of authorized ProjectIDs | |
 
 The plugin_name should be "openstack_iid" and matches the name used in plugin config. The plugin_cmd should specify the path to the plugin binary.
 
