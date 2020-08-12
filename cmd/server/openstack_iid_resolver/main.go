@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"sync"
@@ -38,7 +39,7 @@ type IIDResolverPlugin struct {
 	config   *IIDResolverPluginConfig
 	instance openstack.InstanceClient
 
-	mu                 sync.RWMutex
+	mtx                sync.RWMutex
 	getInstanceHandler func(string, hclog.Logger) (openstack.InstanceClient, error)
 }
 
@@ -64,19 +65,20 @@ func builtin(p *IIDResolverPlugin) catalog.Plugin {
 // New returns a *IIDResolverPlugin with default getOpenStackHandler
 func New() *IIDResolverPlugin {
 	return &IIDResolverPlugin{
-		mu:                 sync.RWMutex{},
+		mtx:                sync.RWMutex{},
 		getInstanceHandler: getOpenStackInstance,
 	}
 }
 
 func (p *IIDResolverPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
+	if p.getInstanceHandler == nil {
+		return nil, errors.New("handler not found, plugin not initialized")
+	}
+
 	config := new(IIDResolverPluginConfig)
 	if err := hcl.Decode(config, req.Configuration); err != nil {
 		return nil, fmt.Errorf("failed to decode configuration file: %v", err)
 	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	instance, err := p.getInstanceHandler(config.CloudName, p.logger)
 	if err != nil {
@@ -84,7 +86,8 @@ func (p *IIDResolverPlugin) Configure(ctx context.Context, req *spi.ConfigureReq
 	}
 
 	p.instance = instance
-	p.config = config
+	p.setConfig(config)
+
 	return &spi.ConfigureResponse{}, nil
 }
 
@@ -113,6 +116,14 @@ func (p *IIDResolverPlugin) GetPluginInfo(ctx context.Context, req *spi.GetPlugi
 
 // makeSelectorFromSpiffeID returns Selector sets related to instance
 func (p *IIDResolverPlugin) makeSelectorFromSpiffeID(spiffeID string) (*spc.Selectors, error) {
+	config, err := p.getConfig()
+	if err != nil {
+		return nil, err
+	}
+	if p.instance == nil {
+		return nil, errors.New("openstack client not configured")
+	}
+
 	iid, err := genInstanceIDFromSpiffeID(spiffeID)
 	if err != nil {
 		return nil, err
@@ -127,8 +138,8 @@ func (p *IIDResolverPlugin) makeSelectorFromSpiffeID(spiffeID string) (*spc.Sele
 	var selectors spc.Selectors
 	selectors.Entries = sgSelector
 
-	if p.config.CustomMetaData {
-		metaSelector := genCustomMetaSelector(s.Metadata, p.config.MetaDataKeys)
+	if config.CustomMetaData {
+		metaSelector := genCustomMetaSelector(s.Metadata, config.MetaDataKeys)
 		selectors.Entries = append(selectors.Entries, metaSelector...)
 	}
 
@@ -222,6 +233,22 @@ func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.Instance
 
 func (p *IIDResolverPlugin) SetLogger(log hclog.Logger) {
 	p.logger = log
+}
+
+func (p *IIDResolverPlugin) setConfig(config *IIDResolverPluginConfig) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.config = config
+}
+
+func (p *IIDResolverPlugin) getConfig() (*IIDResolverPluginConfig, error) {
+	p.mtx.RLock()
+	defer p.mtx.RUnlock()
+
+	if p.config == nil {
+		return nil, errors.New("plugin not configured")
+	}
+	return p.config, nil
 }
 
 func main() {
