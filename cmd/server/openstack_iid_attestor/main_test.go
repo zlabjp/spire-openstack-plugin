@@ -10,8 +10,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
+
+	spc "github.com/spiffe/spire/proto/spire/common"
+	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/spiffe/spire/proto/spire/common/plugin"
@@ -27,6 +31,9 @@ const (
 	pluginConfig = `
 	cloud_name = "test"
 	projectid_allow_list = ["alpha", "bravo"]
+    custom_metadata = { 
+      keys = ["env", "role"]
+    }
 	`
 )
 
@@ -121,6 +128,142 @@ func TestAttest(t *testing.T) {
 
 	if err := p.Attest(fs); err != nil {
 		t.Errorf("Attestation error: %v", err)
+	}
+}
+
+func TestMakeSelectors(t *testing.T) {
+
+	for i, tc := range []struct {
+		keys []string
+		meta map[string]string
+		sec  []map[string]interface{}
+		want []*spc.Selector
+	}{
+		// 0: normal case
+		{
+			keys: []string{},
+			meta: map[string]string{
+				"env":  "test",
+				"role": "my-role",
+			},
+			sec: []map[string]interface{}{
+				{
+					"id":   "123",
+					"name": "my-sg",
+				},
+			},
+			want: []*spc.Selector{
+				{
+					Type:  common.PluginName,
+					Value: "meta:env:test",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "meta:role:my-role",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "sg:id:123",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "sg:name:my-sg",
+				},
+			},
+		},
+		// 1: case has additional meta data
+		{
+			keys: []string{"env", "role"},
+			meta: map[string]string{
+				"env":     "test",
+				"role":    "my-role",
+				"charlie": "delta",
+				"echo":    "foxtrot",
+			},
+			sec: []map[string]interface{}{
+				{
+					"id":   "123",
+					"name": "my-sg",
+				},
+			},
+			want: []*spc.Selector{
+				{
+					Type:  common.PluginName,
+					Value: "meta:env:test",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "meta:role:my-role",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "sg:id:123",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "sg:name:my-sg",
+				},
+			},
+		},
+		// 2: empty meta values
+		{
+			keys: []string{},
+			sec: []map[string]interface{}{
+				{
+					"id":   "123",
+					"name": "my-sg",
+				},
+			},
+			want: []*spc.Selector{
+				{
+					Type:  common.PluginName,
+					Value: "sg:id:123",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "sg:name:my-sg",
+				},
+			},
+		},
+		// 3: empty sec values
+		{
+			keys: []string{},
+			meta: map[string]string{
+				"env":  "test",
+				"role": "my-role",
+			},
+			want: []*spc.Selector{
+				{
+					Type:  common.PluginName,
+					Value: "meta:env:test",
+				},
+				{
+					Type:  common.PluginName,
+					Value: "meta:role:my-role",
+				},
+			},
+		},
+		// 4: empty values
+		{},
+	} {
+		fi := fake.NewInstance(testProjectID, tc.meta, tc.sec)
+
+		p := newTestPlugin()
+		p.logger = testutil.TestLogger()
+		p.instance = fi
+		p.config.CustomMetaData = &CustomMetadata{
+			Keys: tc.keys,
+		}
+
+		server, _ := p.instance.Get(testUUID)
+		resp, err := p.makeSelectors(server)
+		if err != nil {
+			t.Errorf("#%v: Error from makeSelectors(): %v", i, err)
+		}
+
+		if !reflect.DeepEqual(resp.Entries, tc.want) {
+			t.Errorf("#%v: got %v, want %v", i, resp.Entries, tc.want)
+		}
 	}
 }
 
