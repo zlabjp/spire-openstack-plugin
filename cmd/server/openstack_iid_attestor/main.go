@@ -13,8 +13,14 @@ import (
 	"fmt"
 	"sync"
 
+	spu "github.com/spiffe/spire/pkg/common/util"
+	spc "github.com/spiffe/spire/proto/spire/common"
+
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/secgroups"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/hcl"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/server/plugin/nodeattestor"
 	nodeattestorbase "github.com/spiffe/spire/pkg/server/plugin/nodeattestor/base"
@@ -42,6 +48,25 @@ type IIDAttestorPluginConfig struct {
 	trustDomain        string
 	CloudName          string   `hcl:"cloud_name"`
 	ProjectIDAllowList []string `hcl:"projectid_allow_list"`
+	// If CustomMetaData is not nil, the plugin makes custom metadata Selectors.
+	//
+	//  plugin_data {
+	//     cloud_name = "test"
+	//     // If you need custom metadata Selectors, specify the parameter as follows.
+	//     custom_metadata = {}
+	//     // If you need Selectors for specific metadata only, specify as follows.
+	//     custom_metadata = {
+	//         keys = ["alpha", "bravo"]
+	//     }
+	//  }
+	//
+	CustomMetaData *CustomMetadata `hcl:"custom_metadata"`
+}
+
+type CustomMetadata struct {
+	// The plugin makes Selectors by given keys.
+	// If the Keys is empty, the plugin will makes Selectors using with all custom metadata keys.
+	Keys []string `hcl:"keys"`
 }
 
 // BuiltIn constructs a catalog Plugin using a new instance of this plugin.
@@ -96,10 +121,16 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 		return fmt.Errorf("IID has already been used to attest an agent: %v", iid)
 	}
 
+	selectors, err := p.makeSelectors(s)
+	if err != nil {
+		return err
+	}
+
 	for _, pid := range config.ProjectIDAllowList {
 		if s.TenantID == pid {
 			resp := &nodeattestor.AttestResponse{
-				AgentId: agentID,
+				AgentId:   agentID,
+				Selectors: selectors.Entries,
 			}
 			return stream.Send(resp)
 		}
@@ -156,6 +187,86 @@ func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.Instance
 		return nil, err
 	}
 	return openstack.NewInstance(provider, logger)
+}
+
+// makeSelectors returns Selector sets related to instance
+func (p *IIDAttestorPlugin) makeSelectors(server *servers.Server) (*spc.Selectors, error) {
+	sgSelector, err := genSGSelector(server.SecurityGroups)
+	if err != nil {
+		return nil, err
+	}
+	var selectors spc.Selectors
+	selectors.Entries = sgSelector
+
+	if p.config.CustomMetaData != nil {
+		metaSelector := genCustomMetaSelector(server.Metadata, p.config.CustomMetaData.Keys)
+		selectors.Entries = append(selectors.Entries, metaSelector...)
+	}
+
+	spu.SortSelectors(selectors.Entries)
+
+	return &selectors, nil
+}
+
+// genSGSelector generates Selector list about SecurityGroup.
+func genSGSelector(sgMapList []map[string]interface{}) ([]*spc.Selector, error) {
+	var sList []*spc.Selector
+	for i := range sgMapList {
+		m := sgMapList[i]
+		if m == nil {
+			continue
+		}
+
+		var sg secgroups.SecurityGroup
+		if err := mapstructure.Decode(m, &sg); err != nil {
+			return nil, fmt.Errorf("failed to decode SecurityGroup info: %v", err)
+		}
+
+		if sg.ID != "" {
+			sList = append(sList,
+				&spc.Selector{
+					Type:  common.PluginName,
+					Value: fmt.Sprintf("sg:id:%s", sg.ID),
+				})
+		}
+		if sg.Name != "" {
+			sList = append(sList,
+				&spc.Selector{
+					Type:  common.PluginName,
+					Value: fmt.Sprintf("sg:name:%s", sg.Name),
+				})
+		}
+	}
+	return sList, nil
+}
+
+// genCustomMetaSelector generates Selector list about Custom Metadata.
+func genCustomMetaSelector(meta map[string]string, acceptKeys []string) []*spc.Selector {
+	var sList []*spc.Selector
+
+	if len(acceptKeys) > 0 {
+		for _, key := range acceptKeys {
+			if v, ok := meta[key]; ok && v != "" {
+				sList = append(sList,
+					&spc.Selector{
+						Type:  common.PluginName,
+						Value: fmt.Sprintf("meta:%s:%s", key, v),
+					})
+			}
+		}
+	} else {
+		for k, v := range meta {
+			if k != "" && v != "" {
+				sList = append(sList,
+					&spc.Selector{
+						Type:  common.PluginName,
+						Value: fmt.Sprintf("meta:%s:%s", k, v),
+					})
+			}
+		}
+	}
+
+	return sList
 }
 
 func (p *IIDAttestorPlugin) SetLogger(log hclog.Logger) {

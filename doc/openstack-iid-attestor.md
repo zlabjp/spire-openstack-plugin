@@ -28,7 +28,14 @@ plugins {
         plugin_data {
             cloud_name = "test"
             projectid_allow_list = ["123", "abc"]
-        }
+            //
+            // If you need custom metadata Selectors, specify the parameter as follows.
+            // custom_metadata = {}
+            //
+            // If you need only Selectors for specific metadata, specify as follows.
+            // custom_metadata = {
+            //    keys = ["alpha", "bravo"]
+            // }
     }
 ...
 ```
@@ -37,8 +44,30 @@ plugins {
 |:----|:-----|:---------|:------------|:--------|
 | cloud_name | string | ✓ | Name of cloud entry in clouds.yaml to use |  |
 | projectid_allow_list | array | ✓ | List of authorized ProjectIDs | |
+| custom_metadata | struct   |  |  Make Selector of Custom Metadata |  |
+
+custom_metadata 
+
+| key | type | required | description | example |
+|:----|:-----|:---------|:------------|:--------|
+| keys | Array |  | The plugin makes Selectors by given keys. If the Keys is empty, the plugin will makes Selectors using with all custom metadata keys |  |
+
 
 The plugin_name should be "openstack_iid" and matches the name used in plugin config. The plugin_cmd should specify the path to the plugin binary.
+
+## Selectors
+
+This node attestor plugin also generates Selectors as follows.
+
+| Selector            | Example                                           | Description                                                      |
+| ------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
+| Security Group ID   | `sg:id:sg-1234567`                                | The id of the security group the instance belongs to             |
+| Security Group Name | `sg:name:default`                                 | The name of the security group the instance belongs to           |
+| Custom Metadata     | `meta:role:web`, `meta:env:dev`                   | The key=value pairs of the custom metadata[^1] that the instance has. `meta:{key}:{value}` |
+
+ All of the selectors have the type `openstack_iid`.
+
+ [^1]: https://developer.openstack.org/api-guide/compute/server_concepts.html#server-metadata
 
 ### Setup openstack configuration file (clouds.yaml) on instances
 
