@@ -14,19 +14,26 @@ import (
 	"sync"
 	"testing"
 
-	spc "github.com/spiffe/spire/proto/spire/common"
-	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
-
 	"github.com/hashicorp/go-hclog"
-	"github.com/spiffe/spire/proto/spire/common/plugin"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
+
+	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
+	fake_common "github.com/zlabjp/spire-openstack-plugin/pkg/testutil/fake/common"
+	fake_openstack "github.com/zlabjp/spire-openstack-plugin/pkg/testutil/fake/openstack"
+	fake_server "github.com/zlabjp/spire-openstack-plugin/pkg/testutil/fake/server"
+
 	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"
-	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
 )
 
 const (
 	testUUID      = "123"
 	testProjectID = "abc"
+)
+
+var (
+	globalConfig = &configv1.CoreConfiguration{
+		TrustDomain: "example.com",
+	}
 
 	pluginConfig = `
 	cloud_name = "test"
@@ -35,12 +42,6 @@ const (
       keys = ["env", "role"]
     }
 	`
-)
-
-var (
-	globalConfig = &plugin.ConfigureRequest_GlobalConfig{
-		TrustDomain: "example.com",
-	}
 )
 
 func newTestPlugin() *IIDAttestorPlugin {
@@ -53,23 +54,23 @@ func newTestPlugin() *IIDAttestorPlugin {
 	}
 }
 
-func notAttestedBeforeHandler(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error) {
+func notAttestedBeforeHandler(_ context.Context, _ *IIDAttestorPlugin, _ string) (bool, error) {
 	return false, nil
 }
 
-func onceAttestedBeforeHandler(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error) {
+func onceAttestedBeforeHandler(_ context.Context, _ *IIDAttestorPlugin, _ string) (bool, error) {
 	return true, nil
 }
 
 func TestConfigure(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
-		return fake.NewInstance(testProjectID, nil, nil), nil
+		return fake_openstack.NewInstance(testProjectID, nil, nil), nil
 	}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	ctx := context.Background()
-	req := fake.NewFakeConfigureRequest(globalConfig, pluginConfig)
+	req := fake_common.NewConfigureRequest(globalConfig, pluginConfig)
 
 	_, err := p.Configure(ctx, req)
 	if err != nil {
@@ -80,12 +81,12 @@ func TestConfigure(t *testing.T) {
 func TestConfigureError(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
-		return fake.NewInstance(testProjectID, nil, nil), nil
+		return fake_openstack.NewInstance(testProjectID, nil, nil), nil
 	}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
 	ctx := context.Background()
-	req := fake.NewFakeConfigureRequest(globalConfig, "invalid config")
+	req := fake_common.NewConfigureRequest(globalConfig, "invalid config")
 
 	_, err := p.Configure(ctx, req)
 	if err == nil {
@@ -96,7 +97,7 @@ func TestConfigureError(t *testing.T) {
 func TestConfigureEmptyProjectID(t *testing.T) {
 	p := newTestPlugin()
 	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
-		return fake.NewInstance(testProjectID, nil, nil), nil
+		return fake_openstack.NewInstance(testProjectID, nil, nil), nil
 	}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
@@ -105,7 +106,7 @@ func TestConfigureEmptyProjectID(t *testing.T) {
 	`
 
 	ctx := context.Background()
-	req := fake.NewFakeConfigureRequest(globalConfig, conf)
+	req := fake_common.NewConfigureRequest(globalConfig, conf)
 
 	wantError := "projectid_allow_list is required"
 	_, err := p.Configure(ctx, req)
@@ -117,27 +118,26 @@ func TestConfigureEmptyProjectID(t *testing.T) {
 }
 
 func TestAttest(t *testing.T) {
-	fi := fake.NewInstance(testProjectID, nil, nil)
-
 	p := newTestPlugin()
-	p.instance = fi
+	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
+		return fake_openstack.NewInstance(testProjectID, nil, nil), nil
+	}
 	p.config.ProjectIDAllowList = []string{testProjectID}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
-	fs := fake.NewAttestStream(testUUID)
+	fs := fake_server.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err != nil {
 		t.Errorf("Attestation error: %v", err)
 	}
 }
 
-func TestMakeSelectors(t *testing.T) {
-
+func TestMakeSelectorValues(t *testing.T) {
 	for i, tc := range []struct {
 		keys []string
 		meta map[string]string
 		sec  []map[string]interface{}
-		want []*spc.Selector
+		want []string
 	}{
 		// 0: normal case
 		{
@@ -152,23 +152,11 @@ func TestMakeSelectors(t *testing.T) {
 					"name": "my-sg",
 				},
 			},
-			want: []*spc.Selector{
-				{
-					Type:  common.PluginName,
-					Value: "meta:env:test",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "meta:role:my-role",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "sg:id:123",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "sg:name:my-sg",
-				},
+			want: []string{
+				"meta:env:test",
+				"meta:role:my-role",
+				"sg:id:123",
+				"sg:name:my-sg",
 			},
 		},
 		// 1: case has additional meta data
@@ -186,23 +174,11 @@ func TestMakeSelectors(t *testing.T) {
 					"name": "my-sg",
 				},
 			},
-			want: []*spc.Selector{
-				{
-					Type:  common.PluginName,
-					Value: "meta:env:test",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "meta:role:my-role",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "sg:id:123",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "sg:name:my-sg",
-				},
+			want: []string{
+				"meta:env:test",
+				"meta:role:my-role",
+				"sg:id:123",
+				"sg:name:my-sg",
 			},
 		},
 		// 2: empty meta values
@@ -214,15 +190,9 @@ func TestMakeSelectors(t *testing.T) {
 					"name": "my-sg",
 				},
 			},
-			want: []*spc.Selector{
-				{
-					Type:  common.PluginName,
-					Value: "sg:id:123",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "sg:name:my-sg",
-				},
+			want: []string{
+				"sg:id:123",
+				"sg:name:my-sg",
 			},
 		},
 		// 3: empty sec values
@@ -232,21 +202,15 @@ func TestMakeSelectors(t *testing.T) {
 				"env":  "test",
 				"role": "my-role",
 			},
-			want: []*spc.Selector{
-				{
-					Type:  common.PluginName,
-					Value: "meta:env:test",
-				},
-				{
-					Type:  common.PluginName,
-					Value: "meta:role:my-role",
-				},
+			want: []string{
+				"meta:env:test",
+				"meta:role:my-role",
 			},
 		},
 		// 4: empty values
 		{},
 	} {
-		fi := fake.NewInstance(testProjectID, tc.meta, tc.sec)
+		fi := fake_openstack.NewInstance(testProjectID, tc.meta, tc.sec)
 
 		p := newTestPlugin()
 		p.logger = testutil.TestLogger()
@@ -256,43 +220,44 @@ func TestMakeSelectors(t *testing.T) {
 		}
 
 		server, _ := p.instance.Get(testUUID)
-		resp, err := p.makeSelectors(server)
+		resp, err := p.makeSelectorValues(server)
 		if err != nil {
 			t.Errorf("#%v: Error from makeSelectors(): %v", i, err)
 		}
 
-		if !reflect.DeepEqual(resp.Entries, tc.want) {
-			t.Errorf("#%v: got %v, want %v", i, resp.Entries, tc.want)
+		if !reflect.DeepEqual(resp, tc.want) {
+			t.Errorf("#%v: got %v, want %v", i, resp, tc.want)
 		}
 	}
 }
 
 func TestAttestInvalidUUID(t *testing.T) {
 	errMsg := "invalid uuid"
-	fi := fake.NewErrorInstance(errMsg)
 
 	p := newTestPlugin()
-	p.instance = fi
+	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
+		return fake_openstack.NewErrorInstance(errMsg), nil
+	}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
-	fs := fake.NewAttestStream(testUUID)
+	fs := fake_server.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expected, got nil")
-	} else if err.Error() != fmt.Sprintf("your IID is invalid: %v", errMsg) {
+	} else if err.Error() != fmt.Sprintf("failed to get instance information: %v", errMsg) {
 		t.Errorf("unexpected error messsage: %v", err)
 	}
 }
 
 func TestAttestInvalidProjectID(t *testing.T) {
-	fi := fake.NewInstance("invalid-project-id", nil, nil)
-
 	p := newTestPlugin()
-	p.instance = fi
+	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
+		return fake_openstack.NewInstance("invalid-project-id", nil, nil), nil
+	}
 	p.config.ProjectIDAllowList = []string{testProjectID}
 	p.attestedBeforeHandler = notAttestedBeforeHandler
 
-	fs := fake.NewAttestStream(testUUID)
+	fs := fake_server.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expected, got nil")
@@ -302,15 +267,15 @@ func TestAttestInvalidProjectID(t *testing.T) {
 }
 
 func TestAttestBefore(t *testing.T) {
-	fi := fake.NewInstance(testProjectID, nil, nil)
-
 	p := newTestPlugin()
-	p.instance = fi
+	p.getInstanceHandler = func(n string, logger hclog.Logger) (openstack.InstanceClient, error) {
+		return fake_openstack.NewInstance(testProjectID, nil, nil), nil
+	}
 	p.config.ProjectIDAllowList = []string{testProjectID}
 
 	p.attestedBeforeHandler = onceAttestedBeforeHandler
 
-	fs := fake.NewAttestStream(testUUID)
+	fs := fake_server.NewAttestStream(testUUID)
 
 	if err := p.Attest(fs); err == nil {
 		t.Errorf("an error expected, got nil")

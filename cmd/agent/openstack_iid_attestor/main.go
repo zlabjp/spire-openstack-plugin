@@ -13,46 +13,34 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/spiffe/spire/pkg/agent/plugin/nodeattestor"
-	"github.com/spiffe/spire/pkg/common/catalog"
-	spc "github.com/spiffe/spire/proto/spire/common"
-	spi "github.com/spiffe/spire/proto/spire/common/plugin"
+	"github.com/spiffe/spire-plugin-sdk/pluginmain"
+	nodeattestorv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/plugin/agent/nodeattestor/v1"
+	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
 
-	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 )
 
 // IIDAttestorPlugin implements the nodeattestor Plugin interface
 type IIDAttestorPlugin struct {
+	nodeattestorv1.UnsafeNodeAttestorServer
+	configv1.UnsafeConfigServer
+
 	logger hclog.Logger
 
 	getMetadataHandler func() (*openstack.Metadata, error)
 }
 
-// BuiltIn constructs a catalog Plugin using a new instance of this plugin.
-func BuiltIn() catalog.Plugin {
-	return builtin(New())
-}
-
-func builtin(p *IIDAttestorPlugin) catalog.Plugin {
-	return catalog.MakePlugin(common.PluginName, nodeattestor.PluginServer(p))
-}
-
-func New() *IIDAttestorPlugin {
+func newPlugin() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
 		getMetadataHandler: openstack.GetMetadataFromMetadataService,
 	}
 }
 
-func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
-	return &spi.ConfigureResponse{}, nil
+func (p *IIDAttestorPlugin) Configure(_ context.Context, _ *configv1.ConfigureRequest) (*configv1.ConfigureResponse, error) {
+	return &configv1.ConfigureResponse{}, nil
 }
 
-func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoRequest) (*spi.GetPluginInfoResponse, error) {
-	return &spi.GetPluginInfoResponse{}, nil
-}
-
-func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
+func (p *IIDAttestorPlugin) AidAttestation(stream nodeattestorv1.NodeAttestor_AidAttestationServer) error {
 	p.logger.Info("Prepare Attestation Request")
 
 	if p.getMetadataHandler == nil {
@@ -63,10 +51,10 @@ func (p *IIDAttestorPlugin) FetchAttestationData(stream nodeattestor.NodeAttesto
 	if err != nil {
 		return fmt.Errorf("failed to retrieve openstack metadata: %v", err)
 	}
-	return stream.Send(&nodeattestor.FetchAttestationDataResponse{
-		AttestationData: &spc.AttestationData{
-			Type: common.PluginName,
-			Data: []byte(meta.UUID),
+
+	return stream.Send(&nodeattestorv1.PayloadOrChallengeResponse{
+		Data: &nodeattestorv1.PayloadOrChallengeResponse_Payload{
+			Payload: []byte(meta.UUID),
 		},
 	})
 }
@@ -76,5 +64,9 @@ func (p *IIDAttestorPlugin) SetLogger(log hclog.Logger) {
 }
 
 func main() {
-	catalog.PluginMain(BuiltIn())
+	p := newPlugin()
+	pluginmain.Serve(
+		nodeattestorv1.NodeAttestorPluginServer(p),
+		configv1.ConfigServiceServer(p),
+	)
 }
