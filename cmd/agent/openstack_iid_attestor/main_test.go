@@ -14,7 +14,7 @@ import (
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/testutil"
-	"github.com/zlabjp/spire-openstack-plugin/pkg/util/fake"
+	fake_agent "github.com/zlabjp/spire-openstack-plugin/pkg/testutil/fake/agent"
 )
 
 func newTestPlugin() *IIDAttestorPlugin {
@@ -23,7 +23,7 @@ func newTestPlugin() *IIDAttestorPlugin {
 	}
 }
 
-func TestFetchAttestationData(t *testing.T) {
+func TestAidAttestation(t *testing.T) {
 	p := newTestPlugin()
 	p.getMetadataHandler = func() (*openstack.Metadata, error) {
 		return &openstack.Metadata{
@@ -33,9 +33,9 @@ func TestFetchAttestationData(t *testing.T) {
 		}, nil
 	}
 
-	f := fake.NewFakeFetchAttestationStream()
+	f := fake_agent.NewAidAttestationStream()
 
-	if err := p.FetchAttestationData(f); err != nil {
+	if err := p.AidAttestation(f); err != nil {
 		t.Errorf("unexpected error from FetchAttestationData(): %v", err)
 	}
 	if _, err := f.Recv(); err != nil {
@@ -50,10 +50,10 @@ func TestFetchAttestationDataMetadataHandlerFailed(t *testing.T) {
 		return nil, errors.New(errMsg)
 	}
 
-	f := fake.NewFakeFetchAttestationStream()
+	f := fake_agent.NewAidAttestationStream()
 	wantErr := fmt.Sprintf("failed to retrieve openstack metadata: %v", errMsg)
 
-	if err := p.FetchAttestationData(f); err == nil {
+	if err := p.AidAttestation(f); err == nil {
 		t.Errorf("Expected an error, got nil: %v", err)
 	} else {
 		if err.Error() != wantErr {
@@ -68,9 +68,9 @@ func TestFetchAttestationDataMetadataHandlerNotFound(t *testing.T) {
 
 	errMsg := "handler not found, plugin not initialized"
 
-	f := fake.NewFakeFetchAttestationStream()
+	f := fake_agent.NewAidAttestationStream()
 
-	err := p.FetchAttestationData(f)
+	err := p.AidAttestation(f)
 	if err == nil {
 		t.Error("expected an error is occurred but got nil")
 	} else {

@@ -1,11 +1,11 @@
 /**
- * Copyright 2019, Z Lab Corporation. All rights reserved.
+ * Copyright 2021, Z Lab Corporation. All rights reserved.
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 
-package fake
+package openstack
 
 import (
 	"errors"
@@ -33,13 +33,6 @@ func NewInstance(projectID string, metaData map[string]string, secGroup []map[st
 	}
 }
 
-func NewInstanceWithTime(projectID string, created time.Time) openstack.InstanceClient {
-	return &Instance{
-		projectID: projectID,
-		created:   created,
-	}
-}
-
 func (f *Instance) Get(uuid string) (*servers.Server, error) {
 	return &servers.Server{
 		ID:             uuid,
@@ -64,6 +57,6 @@ func NewErrorInstance(msg string) openstack.InstanceClient {
 	}
 }
 
-func (f *ErrorInstance) Get(uuid string) (*servers.Server, error) {
+func (f *ErrorInstance) Get(_ string) (*servers.Server, error) {
 	return nil, errors.New(f.message)
 }

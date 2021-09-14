@@ -11,20 +11,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
-
-	spu "github.com/spiffe/spire/pkg/common/util"
-	spc "github.com/spiffe/spire/proto/spire/common"
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/secgroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/hcl"
 	"github.com/mitchellh/mapstructure"
-	"github.com/spiffe/spire/pkg/common/catalog"
-	"github.com/spiffe/spire/pkg/server/plugin/nodeattestor"
+	"github.com/spiffe/spire-plugin-sdk/pluginmain"
+	nodeattestorv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/plugin/server/nodeattestor/v1"
+	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
 	nodeattestorbase "github.com/spiffe/spire/pkg/server/plugin/nodeattestor/base"
-	spi "github.com/spiffe/spire/proto/spire/common/plugin"
 
 	"github.com/zlabjp/spire-openstack-plugin/pkg/common"
 	"github.com/zlabjp/spire-openstack-plugin/pkg/openstack"
@@ -33,6 +31,8 @@ import (
 // IIDAttestorPlugin implements the nodeattestor Plugin interface
 type IIDAttestorPlugin struct {
 	nodeattestorbase.Base
+	nodeattestorv1.UnsafeNodeAttestorServer
+	configv1.UnsafeConfigServer
 
 	logger   hclog.Logger
 	config   *IIDAttestorPluginConfig
@@ -41,7 +41,7 @@ type IIDAttestorPlugin struct {
 	mtx *sync.RWMutex
 
 	getInstanceHandler    func(string, hclog.Logger) (openstack.InstanceClient, error)
-	attestedBeforeHandler func(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error)
+	attestedBeforeHandler func(ctx context.Context, p *IIDAttestorPlugin, agentID string) (bool, error)
 }
 
 type IIDAttestorPluginConfig struct {
@@ -69,16 +69,7 @@ type CustomMetadata struct {
 	Keys []string `hcl:"keys"`
 }
 
-// BuiltIn constructs a catalog Plugin using a new instance of this plugin.
-func BuiltIn() catalog.Plugin {
-	return builtin(New())
-}
-
-func builtin(p *IIDAttestorPlugin) catalog.Plugin {
-	return catalog.MakePlugin(common.PluginName, nodeattestor.PluginServer(p))
-}
-
-func New() *IIDAttestorPlugin {
+func newPlugin() *IIDAttestorPlugin {
 	return &IIDAttestorPlugin{
 		mtx:                   &sync.RWMutex{},
 		getInstanceHandler:    getOpenStackInstance,
@@ -86,7 +77,7 @@ func New() *IIDAttestorPlugin {
 	}
 }
 
-func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer) error {
+func (p *IIDAttestorPlugin) Attest(stream nodeattestorv1.NodeAttestor_AttestServer) error {
 	p.logger.Info("Received attestation request")
 
 	config, err := p.getConfig()
@@ -94,8 +85,18 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 		return err
 	}
 
-	if p.instance == nil {
-		return errors.New("openstack instance client not configured")
+	p.mtx.RLock()
+	instance := p.instance
+	p.mtx.RUnlock()
+
+	if instance == nil {
+		instance, err = p.getInstanceHandler(config.CloudName, p.logger)
+		if err != nil {
+			return fmt.Errorf("failed to prepare OpenStack Client: %v", err)
+		}
+		p.mtx.Lock()
+		p.instance = instance
+		p.mtx.Unlock()
 	}
 
 	req, err := stream.Recv()
@@ -103,17 +104,17 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 		return err
 	}
 
-	iid := string(req.AttestationData.Data)
-	s, err := p.instance.Get(iid)
+	iid := string(req.GetPayload())
+	s, err := instance.Get(iid)
 	if err != nil {
-		return fmt.Errorf("your IID is invalid: %v", err)
+		return fmt.Errorf("failed to get instance information: %v", err)
 	}
 
 	p.logger.Debug("Got instance data successfully")
 
 	agentID := common.GenerateSpiffeID(config.trustDomain, s.TenantID, iid)
 
-	attested, err := p.attestedBeforeHandler(p, stream.Context(), agentID)
+	attested, err := p.attestedBeforeHandler(stream.Context(), p, agentID)
 	switch {
 	case err != nil:
 		return err
@@ -121,16 +122,20 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 		return fmt.Errorf("IID has already been used to attest an agent: %v", iid)
 	}
 
-	selectors, err := p.makeSelectors(s)
+	svs, err := p.makeSelectorValues(s)
 	if err != nil {
 		return err
 	}
 
 	for _, pid := range config.ProjectIDAllowList {
 		if s.TenantID == pid {
-			resp := &nodeattestor.AttestResponse{
-				AgentId:   agentID,
-				Selectors: selectors.Entries,
+			resp := &nodeattestorv1.AttestResponse{
+				Response: &nodeattestorv1.AttestResponse_AgentAttributes{
+					AgentAttributes: &nodeattestorv1.AgentAttributes{
+						SpiffeId:       agentID,
+						SelectorValues: svs,
+					},
+				},
 			}
 			return stream.Send(resp)
 		}
@@ -139,44 +144,34 @@ func (p *IIDAttestorPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer
 	return errors.New("invalid attestation request")
 }
 
-func (p *IIDAttestorPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
+func (p *IIDAttestorPlugin) Configure(_ context.Context, req *configv1.ConfigureRequest) (*configv1.ConfigureResponse, error) {
 	if p.getInstanceHandler == nil {
 		return nil, errors.New("handler not found, plugin not initialized")
 	}
 
 	config := &IIDAttestorPluginConfig{}
-	if err := hcl.Decode(config, req.Configuration); err != nil {
-		return nil, fmt.Errorf("failed to decode configuration file: %v", err)
+	if err := hcl.Decode(config, req.HclConfiguration); err != nil {
+		return nil, fmt.Errorf("failed to decode configuration file: %w", err)
 	}
-	if req.GlobalConfig == nil {
+	if req.CoreConfiguration == nil {
 		return nil, errors.New("global configuration is required")
 	}
-	if req.GlobalConfig.TrustDomain == "" {
+	if req.CoreConfiguration.TrustDomain == "" {
 		return nil, errors.New("trust_domain is required")
 	}
 	if len(config.ProjectIDAllowList) == 0 {
 		return nil, errors.New("projectid_allow_list is required")
 	}
 
-	instance, err := p.getInstanceHandler(config.CloudName, p.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare OpenStack Client: %v", err)
-	}
-
-	p.instance = instance
-	config.trustDomain = req.GlobalConfig.TrustDomain
+	config.trustDomain = req.CoreConfiguration.TrustDomain
 
 	p.setConfig(config)
 
-	return &spi.ConfigureResponse{}, nil
-}
-
-func (p *IIDAttestorPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoRequest) (*spi.GetPluginInfoResponse, error) {
-	return &spi.GetPluginInfoResponse{}, nil
+	return &configv1.ConfigureResponse{}, nil
 }
 
 // attestedBefore returns true if given agentID attested before
-func attestedBefore(p *IIDAttestorPlugin, ctx context.Context, agentID string) (bool, error) {
+func attestedBefore(ctx context.Context, p *IIDAttestorPlugin, agentID string) (bool, error) {
 	return p.IsAttested(ctx, agentID)
 }
 
@@ -189,28 +184,28 @@ func getOpenStackInstance(cloud string, logger hclog.Logger) (openstack.Instance
 	return openstack.NewInstance(provider, logger)
 }
 
-// makeSelectors returns Selector sets related to instance
-func (p *IIDAttestorPlugin) makeSelectors(server *servers.Server) (*spc.Selectors, error) {
-	sgSelector, err := genSGSelector(server.SecurityGroups)
+// makeSelectorValues returns Selector sets related to instance
+func (p *IIDAttestorPlugin) makeSelectorValues(server *servers.Server) ([]string, error) {
+	sgSelector, err := genSGSelectorValues(server.SecurityGroups)
 	if err != nil {
 		return nil, err
 	}
-	var selectors spc.Selectors
-	selectors.Entries = sgSelector
+	var svs []string
+	svs = append(svs, sgSelector...)
 
 	if p.config.CustomMetaData != nil {
-		metaSelector := genCustomMetaSelector(server.Metadata, p.config.CustomMetaData.Keys)
-		selectors.Entries = append(selectors.Entries, metaSelector...)
+		metaSelector := genCustomMetaSelectorValues(server.Metadata, p.config.CustomMetaData.Keys)
+		svs = append(svs, metaSelector...)
 	}
 
-	spu.SortSelectors(selectors.Entries)
+	sort.Strings(svs)
 
-	return &selectors, nil
+	return svs, nil
 }
 
-// genSGSelector generates Selector list about SecurityGroup.
-func genSGSelector(sgMapList []map[string]interface{}) ([]*spc.Selector, error) {
-	var sList []*spc.Selector
+// genSGSelectorValues generates Selector list about SecurityGroup.
+func genSGSelectorValues(sgMapList []map[string]interface{}) ([]string, error) {
+	var sList []string
 	for i := range sgMapList {
 		m := sgMapList[i]
 		if m == nil {
@@ -223,45 +218,29 @@ func genSGSelector(sgMapList []map[string]interface{}) ([]*spc.Selector, error) 
 		}
 
 		if sg.ID != "" {
-			sList = append(sList,
-				&spc.Selector{
-					Type:  common.PluginName,
-					Value: fmt.Sprintf("sg:id:%s", sg.ID),
-				})
+			sList = append(sList, fmt.Sprintf("sg:id:%s", sg.ID))
 		}
 		if sg.Name != "" {
-			sList = append(sList,
-				&spc.Selector{
-					Type:  common.PluginName,
-					Value: fmt.Sprintf("sg:name:%s", sg.Name),
-				})
+			sList = append(sList, fmt.Sprintf("sg:name:%s", sg.Name))
 		}
 	}
 	return sList, nil
 }
 
-// genCustomMetaSelector generates Selector list about Custom Metadata.
-func genCustomMetaSelector(meta map[string]string, acceptKeys []string) []*spc.Selector {
-	var sList []*spc.Selector
+// genCustomMetaSelectorValues generates Selector list about Custom Metadata.
+func genCustomMetaSelectorValues(meta map[string]string, acceptKeys []string) []string {
+	var sList []string
 
 	if len(acceptKeys) > 0 {
 		for _, key := range acceptKeys {
 			if v, ok := meta[key]; ok && v != "" {
-				sList = append(sList,
-					&spc.Selector{
-						Type:  common.PluginName,
-						Value: fmt.Sprintf("meta:%s:%s", key, v),
-					})
+				sList = append(sList, fmt.Sprintf("meta:%s:%s", key, v))
 			}
 		}
 	} else {
 		for k, v := range meta {
 			if k != "" && v != "" {
-				sList = append(sList,
-					&spc.Selector{
-						Type:  common.PluginName,
-						Value: fmt.Sprintf("meta:%s:%s", k, v),
-					})
+				sList = append(sList, fmt.Sprintf("meta:%s:%s", k, v))
 			}
 		}
 	}
@@ -290,5 +269,9 @@ func (p *IIDAttestorPlugin) getConfig() (*IIDAttestorPluginConfig, error) {
 }
 
 func main() {
-	catalog.PluginMain(BuiltIn())
+	p := newPlugin()
+	pluginmain.Serve(
+		nodeattestorv1.NodeAttestorPluginServer(p),
+		configv1.ConfigServiceServer(p),
+	)
 }
